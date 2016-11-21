@@ -17,7 +17,7 @@ can be:
 The plugin will use the Maven Shade plugin to collect all of your Maven dependencies into one Jar for deployment to Lambda.
 It will create or update IAM Policies as needed and give you some options on how to configure API Gateway to invoke the Lambda.
 
-If anybody would like to contribute to the development of this, please contact me through GitHub.
+If anybody would like to contribute to the development of this, please contact me through GitHub or at david@mobile-360.com.
 
 These plugins are built on top of [API v3](http://developer.github.com/) through the
 [GitHub Java library](https://github.com/eclipse/egit-github/tree/master/org.eclipse.egit.github.core).
