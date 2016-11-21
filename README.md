@@ -4,15 +4,15 @@ This plugin provides a framework for managing Java code to be deployed into AWS'
 
 The plugin will (when complete) allow you to configure how and where the Lambda is deployed and what events it handles.  Those events
 can be:
-	* API Gateway
-	* DynamoDB stream
-	* IoT rule Action
-	* S3 Event
-	* Cloudwatch Events and Logs
-	* CodeCommit
-	* Cognito Sync Trigger
-	* Kinesis
-	* SNS Events
+* API Gateway
+* DynamoDB stream
+* IoT rule Action
+* S3 Event
+* Cloudwatch Events and Logs
+* CodeCommit
+* Cognito Sync Trigger
+* Kinesis
+* SNS Events
 
 The plugin will use the Maven Shade plugin to collect all of your Maven dependencies into one Jar for deployment to Lambda.
 It will create or update IAM Policies as needed and give you some options on how to configure API Gateway to invoke the Lambda.
