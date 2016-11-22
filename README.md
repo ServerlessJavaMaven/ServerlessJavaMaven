@@ -1,4 +1,4 @@
-# AWS Lambda Java Serverless Maven Plugin [![Build Status](https://travis-ci.org/github/maven-plugins.svg)](https://travis-ci.org/github/maven-plugins)
+# AWS Lambda Java Serverless Maven Plugin [![Build Status](https://travis-ci.org/ServerlessJavaMaven/ServerlessJavaMaven.svg)](https://travis-ci.org/ServerlessJavaMaven/ServerlessJavaMaven)
 
 This plugin provides a framework for managing Java code to be deployed into AWS' Lambda environment.
 
