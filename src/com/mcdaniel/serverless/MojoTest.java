@@ -17,7 +17,7 @@ public class MojoTest
 
 	public static void main(String[] args)
 	{
-		ServerlessMojo m = new ServerlessMojo();
+		ServerlessDeployMojo m = new ServerlessDeployMojo();
 		Log log = new TestLog();
 		m.setLog(log);
 		
@@ -64,7 +64,7 @@ public class MojoTest
 		m.permissions = permissions;
 		
 		APIEvent apiEvent = new APIEvent();
-		apiEvent.apiGroupName="TestAPI";
+		apiEvent.apiTitle="TestAPI";
 		apiEvent.method="ANY";
 		apiEvent.protocol="https";
 		apiEvent.swaggerUri="/v2-docs";

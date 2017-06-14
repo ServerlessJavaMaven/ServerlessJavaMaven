@@ -9,10 +9,10 @@ public class APIEvent implements Event
 	/**
 	 * The "RestAPI" name. Will be created if it doesn't exist.
 	 */
-	@Parameter(property="apiGroupName", required=true)
-	protected String apiGroupName;
+	@Parameter(property="apiTitle", required=true)
+	protected String apiTitle;
 	
-	@Parameter(property="customDomainName", required=true)
+	@Parameter(property="customDomainName", required=false)
 	protected String customDomainName;
 	
 	@Parameter(property="protocol", required=false, defaultValue="http")
@@ -48,19 +48,19 @@ public class APIEvent implements Event
 	protected String swaggerUri;
 
 	/**
-	 * @return the apiGroupName
+	 * @return the apiTitle
 	 */
 	public String getApiGroupName()
 	{
-		return apiGroupName;
+		return apiTitle;
 	}
 
 	/**
-	 * @param apiGroupName the apiGroupName to set
+	 * @param apiTitle the apiTitle to set
 	 */
 	public void setApiGroupName(String apiGroupName)
 	{
-		this.apiGroupName = apiGroupName;
+		this.apiTitle = apiGroupName;
 	}
 
 	/**

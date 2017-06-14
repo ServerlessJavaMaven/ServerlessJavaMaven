@@ -6,6 +6,7 @@ import com.amazonaws.regions.Regions;
 import com.amazonaws.services.apigateway.AmazonApiGatewayClient;
 import com.amazonaws.services.apigateway.model.GetExportRequest;
 import com.amazonaws.services.apigateway.model.GetExportResult;
+import com.amazonaws.services.apigateway.model.GetMethodRequest;
 import com.amazonaws.services.apigateway.model.GetRestApisRequest;
 import com.amazonaws.services.apigateway.model.GetRestApisResult;
 import com.amazonaws.services.apigateway.model.Op;
@@ -39,6 +40,9 @@ public class Tester
 			if ( "TestAPI".equals(api.getName()))
 			{
 				theApi = api;
+				
+				
+				
 				GetExportRequest geReq = new GetExportRequest()
 						.withRestApiId(api.getId())
 						.withExportType("swagger")
