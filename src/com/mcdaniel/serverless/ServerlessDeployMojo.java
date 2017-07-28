@@ -1,6 +1,7 @@
 package com.mcdaniel.serverless;
 
 
+import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -854,6 +855,12 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 		}
 		
 		String swaggerFile = "target/jaxrs-analyzer/swagger.json";
+		if ( ! new File(swaggerFile).exists() )
+		{
+			System.out.println("Can't find swagger file: " + swaggerFile);
+			return true;
+		}
+		
 		Swagger swagger = new SwaggerParser().read(swaggerFile);
 		Map<String, Path> paths = swagger.getPaths();
 		for ( String pathKey : paths.keySet() )
