@@ -819,22 +819,33 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 		{
 			GetPolicyRequest getPolicyRequest = new GetPolicyRequest()
 					.withFunctionName(serviceName);
-			GetPolicyResult gpRes = lambdaClient.getPolicy(getPolicyRequest);
-			
-			String policyStr = gpRes.getPolicy();
-
-			policy = mapper.readValue(policyStr, LambdaPolicy.class);
-
-			List<Statement> statements = policy.getStatement();
-			RemovePermissionRequest rpReq = new RemovePermissionRequest();
-			RemovePermissionResult rpRes = null;
-			for ( Statement s : statements )
+			GetPolicyResult gpRes = null;
+			try
 			{
-				getLog().info("Removing permission statement: " + s.getSid());
-				rpReq.setFunctionName(serviceName);
-				rpReq.setStatementId(s.getSid());
-				rpRes = lambdaClient.removePermission(rpReq);
-				getLog().info("Status: " + rpRes.getSdkHttpMetadata().getHttpStatusCode());
+				gpRes = lambdaClient.getPolicy(getPolicyRequest);
+			}
+			catch ( Exception ex )
+			{
+				
+			}
+			
+			if ( gpRes != null )
+			{
+				String policyStr = gpRes.getPolicy();
+	
+				policy = mapper.readValue(policyStr, LambdaPolicy.class);
+	
+				List<Statement> statements = policy.getStatement();
+				RemovePermissionRequest rpReq = new RemovePermissionRequest();
+				RemovePermissionResult rpRes = null;
+				for ( Statement s : statements )
+				{
+					getLog().info("Removing permission statement: " + s.getSid());
+					rpReq.setFunctionName(serviceName);
+					rpReq.setStatementId(s.getSid());
+					rpRes = lambdaClient.removePermission(rpReq);
+					getLog().info("Status: " + rpRes.getSdkHttpMetadata().getHttpStatusCode());
+				}
 			}
 		} catch (Exception e)
 		{

@@ -15,7 +15,36 @@
 	</properties>
 
 
+	<distributionManagement>
+		<snapshotRepository>
+			<id>repo.microstarlogistics.com</id>
+			<url>s3://repo.microstarlogistics.com/snapshot</url>
+		</snapshotRepository>
+		<!-- <repository> -->
+		<!-- <id>repo.microstarlogistics.com</id> -->
+		<!-- <url>s3://repo.microstarlogistics.com/release</url> -->
+		<!-- </repository> -->
+	</distributionManagement>
+
+	<repositories>
+		<repository>
+			<id>repo.microstarlogistics.com</id>
+			<url>s3://repo.microstarlogistics.com/snapshot</url>
+		</repository>
+		<!-- <repository> -->
+		<!-- <id>repo.microstarlogistics.com</id> -->
+		<!-- <url>s3://repo.microstarlogistics.com/release</url> -->
+		<!-- </repository> -->
+	</repositories>
+
 	<build>
+		<extensions>
+			<extension>
+				<groupId>org.kuali.maven.wagons</groupId>
+				<artifactId>maven-s3-wagon</artifactId>
+				<version>LATEST</version>
+			</extension>
+		</extensions>
 		<sourceDirectory>src</sourceDirectory>
 		<plugins>
 			<plugin>
@@ -122,6 +151,12 @@
 	 		<artifactId>swagger-jaxrs</artifactId>
 	 		<version>1.5.13</version>
 	 	</dependency>
+		<!-- https://mvnrepository.com/artifact/io.swagger/swagger-models -->
+		<dependency>
+		    <groupId>io.swagger</groupId>
+		    <artifactId>swagger-models</artifactId>
+		    <version>1.5.13</version>
+		</dependency>
 	 	<dependency>
 	 		<groupId>com.amazonaws.serverless</groupId>
 	 		<artifactId>aws-serverless-java-container-jersey</artifactId>
