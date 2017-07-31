@@ -19,7 +19,9 @@ import com.amazonaws.event.ProgressEventType;
 import com.amazonaws.event.ProgressListener;
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
+import com.amazonaws.services.apigateway.AmazonApiGateway;
 import com.amazonaws.services.apigateway.AmazonApiGatewayClient;
+import com.amazonaws.services.apigateway.AmazonApiGatewayClientBuilder;
 import com.amazonaws.services.apigateway.model.ContentHandlingStrategy;
 import com.amazonaws.services.apigateway.model.CreateResourceRequest;
 import com.amazonaws.services.apigateway.model.CreateResourceResult;
@@ -42,7 +44,9 @@ import com.amazonaws.services.apigateway.model.PutMethodResponseResult;
 import com.amazonaws.services.apigateway.model.PutMethodResult;
 import com.amazonaws.services.apigateway.model.Resource;
 import com.amazonaws.services.apigateway.model.RestApi;
+import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClient;
+import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
 import com.amazonaws.services.identitymanagement.model.AttachRolePolicyRequest;
 import com.amazonaws.services.identitymanagement.model.AttachRolePolicyResult;
 import com.amazonaws.services.identitymanagement.model.CreatePolicyRequest;
@@ -57,7 +61,9 @@ import com.amazonaws.services.identitymanagement.model.GetRoleRequest;
 import com.amazonaws.services.identitymanagement.model.GetRoleResult;
 import com.amazonaws.services.identitymanagement.model.GetUserResult;
 import com.amazonaws.services.identitymanagement.model.NoSuchEntityException;
+import com.amazonaws.services.lambda.AWSLambda;
 import com.amazonaws.services.lambda.AWSLambdaClient;
+import com.amazonaws.services.lambda.AWSLambdaClientBuilder;
 import com.amazonaws.services.lambda.model.AddPermissionRequest;
 import com.amazonaws.services.lambda.model.AddPermissionResult;
 import com.amazonaws.services.lambda.model.CreateAliasRequest;
@@ -82,7 +88,9 @@ import com.amazonaws.services.lambda.model.UpdateFunctionCodeRequest;
 import com.amazonaws.services.lambda.model.UpdateFunctionCodeResult;
 import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationRequest;
 import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationResult;
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.Bucket;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
@@ -128,20 +136,21 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
         
         // Create all of the needed clients.
         getLog().info("Getting clients...");
-        AWSLambdaClient lambdaClient = new AWSLambdaClient(awsCredentials);
-        AmazonS3Client s3Client = new AmazonS3Client(awsCredentials);
-        AmazonIdentityManagementClient iamClient = new AmazonIdentityManagementClient(awsCredentials);
-        AmazonApiGatewayClient apiClient = new AmazonApiGatewayClient(awsCredentials);
+//        AWSLambdaClient lambdaClient = new AWSLambdaClient(awsCredentials);
+//        AmazonS3Client s3Client = new AmazonS3Client(awsCredentials);
+//        AmazonIdentityManagementClient iamClient = new AmazonIdentityManagementClient(awsCredentials);
+//        AmazonApiGatewayClient apiClient = new AmazonApiGatewayClient(awsCredentials);
         
+
         getLog().info("Done.");
         
+        String accountNumber = null;
+        
         //
-        // Get the account number.
+        // Storage for the clients
         //
-        GetUserResult guRes = iamClient.getUser();
-        String[] accountArn = guRes.getUser().getArn().split(":");
-        getLog().info("Account Number: " + accountArn[4]);
-        String accountNumber = accountArn[4];
+        HashMap<String, Object> clients = new HashMap<>();
+        AmazonIdentityManagement iamClient = AmazonIdentityManagementClientBuilder.standard().build();
         
         //
         // Upload the jar to S3
@@ -149,9 +158,28 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
         HashMap<String,Bucket> uploadBucket = new HashMap<>();
         for ( String region : regions.split(","))
         {
+        	Regions regionEnum = Regions.fromName(region);
+            AWSLambda lambdaClient = AWSLambdaClientBuilder.standard().withRegion(regionEnum).build();
+            AmazonS3 s3Client = AmazonS3ClientBuilder.standard().withRegion(regionEnum).build();
+            AmazonApiGateway apiClient = AmazonApiGatewayClientBuilder.standard().withRegion(regionEnum).build();
+            clients.put(region+"-lambda", lambdaClient);
+            clients.put(region+"-s3", s3Client);
+            clients.put(region+"-apigw", apiClient);
+            
+            //
+            // Get the account number.
+            //
+            if ( accountNumber == null )
+            {
+	            GetUserResult guRes = iamClient.getUser();
+	            String[] accountArn = guRes.getUser().getArn().split(":");
+	            getLog().info("Account Number: " + accountArn[4]);
+	            accountNumber = accountArn[4];
+            }
+            
             String uploadJarBucketName = serviceName + "." + environment + "." + region + "." + uploadJarBucket;
             uploadJarBucketName = uploadJarBucketName.toLowerCase();
-	        s3Client.setRegion(Region.getRegion(Regions.fromName(region)));
+//	        s3Client.setRegion(Region.getRegion(Regions.fromName(region)));
 	    	if ( !s3Client.doesBucketExist(uploadJarBucketName.toLowerCase()))	// If bucket doesn't exist, create it.
 	    	{
 	    		getLog().info("Creating bucket " + uploadJarBucketName);
@@ -320,6 +348,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     	
     	// First update the variables
     	rolePolicy = rolePolicy.replace("$regions$", regions);
+    	rolePolicy = rolePolicy.replace("$region$", regions);
     	rolePolicy = rolePolicy.replace("$accountId$", accountNumber);
     	rolePolicy = rolePolicy.replace("$serviceName$", serviceName);
     	rolePolicy = rolePolicy.replace("$environment$", environment);
@@ -348,7 +377,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 				.withPolicyArn(cpRes.getPolicy().getArn());
 		AttachRolePolicyResult arpRes = iamClient.attachRolePolicy(arpReq);
     	
-    	//
+		//
     	// Upload the function
     	//
     	for ( String region : regions.split(",") )
@@ -356,13 +385,18 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     		getLog().debug("Processing for Region: " + region);
     		
     		// Set the client region
-        	lambdaClient.setRegion(Region.getRegion(Regions.fromName(region)));
-        	s3Client.setRegion(Region.getRegion(Regions.fromName(region)));
-        	apiClient.setRegion(Region.getRegion(Regions.fromName(region)));
+//        	lambdaClient.setRegion(Region.getRegion(Regions.fromName(region)));
+//        	s3Client.setRegion(Region.getRegion(Regions.fromName(region)));
+//        	apiClient.setRegion(Region.getRegion(Regions.fromName(region)));
             String uploadJarBucketName = serviceName + "." + environment + "." + region + "." + uploadJarBucket;
             uploadJarBucketName = uploadJarBucketName.toLowerCase();
+
             
-	    	// See if the function already exists
+	    	AWSLambda lambdaClient = (AWSLambda) clients.get(region+"-lambda");
+	    	AmazonApiGateway apiClient = (AmazonApiGateway) clients.get(region+"-apigw");
+	    	AmazonS3 s3Client = (AmazonS3) clients.get(region+"-s3");
+	    	
+			// See if the function already exists
 	        ListFunctionsResult lfRes = lambdaClient.listFunctions();
 	        List<FunctionConfiguration> functions = lfRes.getFunctions();
 	        boolean updateFunction = false;
@@ -557,7 +591,8 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     		for ( String region : regions.split(","))
     		{
 	    		getLog().info("Processing API Gateway configuration for " + region);
-	    		apiClient.setRegion(Region.getRegion(Regions.fromName(region)));
+//	    		apiClient.setRegion(Region.getRegion(Regions.fromName(region)));
+	    		AmazonApiGateway apiClient = (AmazonApiGateway) clients.get(region+"-apigw");
 	    		
 		    	// Now update/create the API Gateway configuration.  We must first figure out if the 
 	    		// REST API already exists.
@@ -662,7 +697,8 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     		for ( String region : regions.split(","))
     		{
 	    		getLog().info("Processing API Gateway configuration for " + region);
-	    		apiClient.setRegion(Region.getRegion(Regions.fromName(region)));
+//	    		apiClient.setRegion(Region.getRegion(Regions.fromName(region)));
+	    		AmazonApiGateway apiClient = (AmazonApiGateway) clients.get(region+"-apigw");
 	    		
 		    	// Now update/create the API Gateway configuration.  We must first figure out if the 
 	    		// REST API already exists.
@@ -784,7 +820,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 		return permString;
 	}
 
-	private boolean addPermission(String apiId, String region, String accountNumber, String serviceArn, String serviceName, AWSLambdaClient lambdaClient, String permString)
+	private boolean addPermission(String apiId, String region, String accountNumber, String serviceArn, String serviceName, AWSLambda lambdaClient, String permString)
 	{
 		boolean ret = false;
 		
@@ -808,7 +844,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	}
 	
 	private boolean addLambdaPermission(String apiId, String region, String accountNumber, String serviceArn, String serviceName,
-			AWSLambdaClient lambdaClient)
+			AWSLambda lambdaClient)
 	{
 		boolean success = false;
 
@@ -925,7 +961,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 		}
     }
     
-    private String createResource(AmazonApiGatewayClient apiClient, 
+    private String createResource(AmazonApiGateway apiClient, 
     		String apiId, String resource, String parentId,
     		String region, String accountNumber, String serviceName)
     {
