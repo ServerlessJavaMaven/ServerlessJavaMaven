@@ -128,8 +128,8 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
         }
         
         // Create the credentials for all of the clients.
-        getLog().info("AccessKey: " + AWSAccessKey);
-        BasicAWSCredentials awsCredentials = new BasicAWSCredentials(AWSAccessKey, AWSSecretKey);
+//        getLog().info("AccessKey: " + AWSAccessKey);
+//        BasicAWSCredentials awsCredentials = new BasicAWSCredentials(AWSAccessKey, AWSSecretKey);
         
         // Setup needed variables
         String assumedRoleName = serviceName + "_AssumedRole";
@@ -177,7 +177,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	            accountNumber = accountArn[4];
             }
             
-            String uploadJarBucketName = serviceName + "." + environment + "." + region + "." + uploadJarBucket;
+            String uploadJarBucketName = environment + "." + region + "." + uploadJarBucket;
             uploadJarBucketName = uploadJarBucketName.toLowerCase();
 //	        s3Client.setRegion(Region.getRegion(Regions.fromName(region)));
 	    	if ( !s3Client.doesBucketExist(uploadJarBucketName.toLowerCase()))	// If bucket doesn't exist, create it.
@@ -437,8 +437,24 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	        	cfReq.setCode(code);
 	        	cfReq.setRole(roleArn);
 	        	cfReq.setRuntime("java8");
-	        	cfReq.setTimeout(3*60);
-	        	cfReq.setMemorySize(384);
+	        	if ( timeout == 0 )
+	        	{
+		        	cfReq.setTimeout(3*60);
+	        	}
+	        	else
+	        	{
+	        		cfReq.setTimeout(timeout);
+	        	}
+	        	
+	        	if ( memorySize == 0 )
+	        	{
+	        		cfReq.setMemorySize(448);
+	        	}
+	        	else
+	        	{
+	        		cfReq.setMemorySize(memorySize);
+	        	}
+	        	
 	        	if ( ! Strings.isNullOrEmpty(description))
 	        		cfReq.setDescription(description);
 				getLog().info("Trying Function create");
@@ -479,7 +495,8 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 					if ( apiId != null )
 					{
 						// Update
-						addLambdaPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient);
+						addLambdaPermission(apiId, region, accountNumber, serviceArn + ":dev", serviceName, lambdaClient);
+						addLambdaPermission(apiId, region, accountNumber, serviceArn + ":test", serviceName, lambdaClient);
 					}
 	        	}
 	        }
@@ -533,7 +550,8 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 					
 					if ( apiId != null )
 					{
-						addLambdaPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient);
+						addLambdaPermission(apiId, region, accountNumber, serviceArn, serviceName + ":dev", lambdaClient);
+						addLambdaPermission(apiId, region, accountNumber, serviceArn, serviceName + ":test", lambdaClient);
 					}
 	        	}
 	        }

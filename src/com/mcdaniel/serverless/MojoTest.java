@@ -47,8 +47,8 @@ public class MojoTest
 //			"        }" +
 //			"    ]" +
 //			"}";
-		m.AWSAccessKey = "AKIAJM7YMMLXKUH5EWRQ";
-		m.AWSSecretKey = "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";
+//		m.AWSAccessKey = "AKIAJM7YMMLXKUH5EWRQ";
+//		m.AWSSecretKey = "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";
 		m.serviceName="TemplateAPI";
 		m.uploadJarBucket="serverless-maven-plugin-uploads";
 //		m.function = new Function();

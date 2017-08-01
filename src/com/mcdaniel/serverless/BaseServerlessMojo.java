@@ -52,12 +52,6 @@ public abstract class BaseServerlessMojo extends AbstractMojo
 	@Parameter(property="description", required=false)
 	protected String description;
 	
-	@Parameter(property="AWSAccessKey", required=true)
-	protected String AWSAccessKey;
-	
-	@Parameter(property="AWSSecretKey", required=true)
-	protected String AWSSecretKey;
-	
 	@Parameter(property="permissions", required=false)
 	protected List<Permission> permissions;
 	
@@ -69,6 +63,12 @@ public abstract class BaseServerlessMojo extends AbstractMojo
 	
 	@Parameter(property="name", required=true)
 	protected String name;
+	
+	@Parameter(property="memorySize", required=false)
+	protected int memorySize;
+	
+	@Parameter(property="timeout", required=false)
+	protected int timeout;
 	
 	@Parameter(property="dynamoEvent", required=false)
 	protected DynamoEvent dynamoEvent;

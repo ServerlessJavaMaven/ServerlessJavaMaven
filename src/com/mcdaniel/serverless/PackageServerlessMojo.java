@@ -43,8 +43,8 @@ public class PackageServerlessMojo extends BaseServerlessMojo
         	getLog().info("Artifact name: " + project.getArtifact().getFile().getName());
         }
         // Create the credentials for all of the clients.
-        getLog().info("AccessKey: " + AWSAccessKey);
-        BasicAWSCredentials awsCredentials = new BasicAWSCredentials(AWSAccessKey, AWSSecretKey);
+//        getLog().info("AccessKey: " + AWSAccessKey);
+//        BasicAWSCredentials awsCredentials = new BasicAWSCredentials(AWSAccessKey, AWSSecretKey);
 
 
 	}
