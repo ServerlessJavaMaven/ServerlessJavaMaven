@@ -177,9 +177,11 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	            accountNumber = accountArn[4];
             }
             
+            getLog().info("Environment: " + environment);
             String uploadJarBucketName = environment + "." + region + "." + uploadJarBucket;
             uploadJarBucketName = uploadJarBucketName.toLowerCase();
 //	        s3Client.setRegion(Region.getRegion(Regions.fromName(region)));
+            getLog().info("Checking if bucket " + uploadJarBucketName.toLowerCase() + " exists...");
 	    	if ( !s3Client.doesBucketExist(uploadJarBucketName.toLowerCase()))	// If bucket doesn't exist, create it.
 	    	{
 	    		getLog().info("Creating bucket " + uploadJarBucketName);
@@ -195,6 +197,10 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	    		}
 //	    		uploadBucket.put(region, cbRes);
 	    	}
+	    	else
+	    	{
+	    		getLog().info("Bucket already exists");
+	    	}
 	
 	    	getLog().info("Uploading Jar in " + region + "...");
 	    	PutObjectRequest poReq = new PutObjectRequest(uploadJarBucketName, project.getArtifact().getFile().getName(), 
@@ -204,11 +210,14 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	    	
 	    	try
 	    	{
+	    		getLog().info("Uploading JAR " + project.getArtifact().getFile().getName() + "...");
 	    		poRes = s3Client.putObject(poReq);
 	    	}
 	    	catch ( Exception ex )
 	    	{
+    			getLog().error("Caught exception uploading JAR " + project.getArtifact().getFile());
 	    		ex.printStackTrace();
+	    		return;
 	    	}
         }
         
@@ -355,6 +364,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     	
 		String policyName = serviceName + "_AssumedPolicy";
 		getLog().info("Creating custom policy: " + policyName);
+		getLog().info("Creating custom policy: " + rolePolicy);
 		CreatePolicyRequest cpReq = new CreatePolicyRequest()
 				.withPolicyDocument(rolePolicy)
 				.withPolicyName(policyName);
@@ -388,7 +398,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 //        	lambdaClient.setRegion(Region.getRegion(Regions.fromName(region)));
 //        	s3Client.setRegion(Region.getRegion(Regions.fromName(region)));
 //        	apiClient.setRegion(Region.getRegion(Regions.fromName(region)));
-            String uploadJarBucketName = serviceName + "." + environment + "." + region + "." + uploadJarBucket;
+            String uploadJarBucketName = environment + "." + region + "." + uploadJarBucket;
             uploadJarBucketName = uploadJarBucketName.toLowerCase();
 
             
@@ -457,12 +467,13 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	        	
 	        	if ( ! Strings.isNullOrEmpty(description))
 	        		cfReq.setDescription(description);
-				getLog().info("Trying Function create");
 	        	while ( true )
 	        	{
 	        		try
 	        		{
+	    				getLog().info("Trying Function create");
 			        	CreateFunctionResult cfRes = lambdaClient.createFunction(cfReq);
+			        	getLog().info("cfres: " + cfRes.getLastModified());
 			        	serviceArn = cfRes.getFunctionArn();
 			        	getLog().info("Function Arn: " + cfRes.getFunctionArn());
 			        	break;
@@ -470,12 +481,26 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	        		catch ( com.amazonaws.services.lambda.model.InvalidParameterValueException ipve )
 	        		{
 	        			getLog().debug("Caught ipve, sleeping...");
-	        			try
+	        			if ( ipve.getMessage() != null && ipve.getMessage().contains("The role defined for the function cannot be assumed"))
 	        			{
-	        				Thread.sleep(5000);
+		        			try
+		        			{
+		        				Thread.sleep(5000);
+		        			}
+		        			catch ( Exception ex ) {}
 	        			}
-	        			catch ( Exception ex ) {}
+	        			else
+	        			{
+	        				getLog().error("Caught unknown IPVE: " + ipve.getMessage());
+	        				return;
+	        			}
 	        		}
+	        		catch ( Throwable ex )
+	        		{
+	        			getLog().error("Caught exception creating function", ex);
+	        			return;
+	        		}
+	        		getLog().info("Shouldn't be here!");
 	        	}
 	        	
 	        	if ( apiEvent != null && apiEvent.apiTitle != null )
@@ -495,8 +520,9 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 					if ( apiId != null )
 					{
 						// Update
-						addLambdaPermission(apiId, region, accountNumber, serviceArn + ":dev", serviceName, lambdaClient);
-						addLambdaPermission(apiId, region, accountNumber, serviceArn + ":test", serviceName, lambdaClient);
+						addLambdaPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient);
+//						addLambdaPermission(apiId, region, accountNumber, serviceArn + ":dev", serviceName, lambdaClient);
+//						addLambdaPermission(apiId, region, accountNumber, serviceArn + ":test", serviceName, lambdaClient);
 					}
 	        	}
 	        }
@@ -550,8 +576,9 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 					
 					if ( apiId != null )
 					{
-						addLambdaPermission(apiId, region, accountNumber, serviceArn, serviceName + ":dev", lambdaClient);
-						addLambdaPermission(apiId, region, accountNumber, serviceArn, serviceName + ":test", lambdaClient);
+						addLambdaPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient);
+//						addLambdaPermission(apiId, region, accountNumber, serviceArn, serviceName + ":dev", lambdaClient);
+//						addLambdaPermission(apiId, region, accountNumber, serviceArn, serviceName + ":test", lambdaClient);
 					}
 	        	}
 	        }
@@ -730,44 +757,6 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	    				theApi = api;
 	    		}
 	    		
-//	    		if ( theApi != null )
-//	    		{
-//	    			// So the "REST API" exists, but that doesn't mean that this resource exists
-//	    			GetResourcesRequest grReq1 = new GetResourcesRequest()
-//	    					.withRestApiId(theApi.getId());
-//	    			GetResourcesResult grRes1 = apiClient.getResources(grReq1);
-//	    			for ( Resource resource : grRes1.getItems())
-//	    			{
-//	    				getLog().debug(String.format("Resource: id=%s, path=%s, pathPart=%s, parentId=%s", resource.getId(), resource.getPath(), resource.getPathPart(), resource.getParentId()));
-//	    			}
-//	    			PatchOperation patOp = new PatchOperation()
-//	    					.withOp(Op.Replace);
-//			    	UpdateRestApiRequest uraReq = new UpdateRestApiRequest()
-//			    			.withRestApiId(theApi.getId())
-//			    			.withPatchOperations(patOp);
-//					apiClient.updateRestApi(uraReq);
-//	    		}
-//	    		else
-//	    		{
-//	    			// Create the REST API
-//	    			CreateRestApiRequest craReq = new CreateRestApiRequest()
-//	    					.withName(serviceName + " API")
-//	    					.withDescription(description);
-//	    			CreateRestApiResult craRes = apiClient.createRestApi(craReq);
-//	    			
-//	    			
-//	    			// Create the resource
-//	    			CreateResourceRequest crReq = new CreateResourceRequest()
-//	    					.withRestApiId(craRes.getId())
-//	    					.withPathPart("/" + serviceName);
-//	    			CreateResourceResult crRes = apiClient.createResource(crReq);
-//	    			
-//	    			
-//	    			// Create the method
-//	    			
-//	    			
-//	    			// Create the domain mapping
-//	    		}
     		}
     		
 	        /**
@@ -902,41 +891,43 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 					getLog().info("Status: " + rpRes.getSdkHttpMetadata().getHttpStatusCode());
 				}
 			}
+
+			String swaggerFile = project.getBasedir().getCanonicalPath() + "/target/jaxrs-analyzer/swagger.json";
+			if ( ! new File(swaggerFile).exists() )
+			{
+				System.out.println("Can't find swagger file: " + swaggerFile);
+				return true;
+			}
+			
+			Swagger swagger = new SwaggerParser().read(swaggerFile);
+			Map<String, Path> paths = swagger.getPaths();
+			for ( String pathKey : paths.keySet() )
+			{
+				getLog().info("Processing path: " + pathKey);
+				Path p = paths.get(pathKey);
+				String permString = null;
+	
+				permString = getPermString(p.getPost(), pathKey, "POST");
+				if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
+				permString = getPermString(p.getOptions(), pathKey, "OPTIONS");
+				if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
+				permString = getPermString(p.getDelete(), pathKey, "DELETE");
+				if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
+				permString = getPermString(p.getGet(), pathKey, "GET");
+				if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
+				permString = getPermString(p.getHead(), pathKey, "HEAD");
+				if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
+				permString = getPermString(p.getPut(), pathKey, "PUT");
+				if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
+	
+			}
 		} catch (Exception e)
 		{
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+			return false;
 		}
 		
-		String swaggerFile = "target/jaxrs-analyzer/swagger.json";
-		if ( ! new File(swaggerFile).exists() )
-		{
-			System.out.println("Can't find swagger file: " + swaggerFile);
-			return true;
-		}
-		
-		Swagger swagger = new SwaggerParser().read(swaggerFile);
-		Map<String, Path> paths = swagger.getPaths();
-		for ( String pathKey : paths.keySet() )
-		{
-			getLog().info("Processing path: " + pathKey);
-			Path p = paths.get(pathKey);
-			String permString = null;
-
-			permString = getPermString(p.getPost(), pathKey, "POST");
-			if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
-			permString = getPermString(p.getOptions(), pathKey, "OPTIONS");
-			if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
-			permString = getPermString(p.getDelete(), pathKey, "DELETE");
-			if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
-			permString = getPermString(p.getGet(), pathKey, "GET");
-			if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
-			permString = getPermString(p.getHead(), pathKey, "HEAD");
-			if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
-			permString = getPermString(p.getPut(), pathKey, "PUT");
-			if ( permString != null ) addPermission(apiId, region, accountNumber, serviceArn, serviceName, lambdaClient, permString);
-
-		}
 		
 		return success;
 	}
