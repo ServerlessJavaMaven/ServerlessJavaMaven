@@ -61,8 +61,8 @@ public abstract class BaseServerlessMojo extends AbstractMojo
 	@Parameter( defaultValue = "${project}", readonly = true )
 	protected MavenProject project; 
 	
-	@Parameter(property="name", required=true)
-	protected String name;
+//	@Parameter(property="name", required=true)
+//	protected String name;
 	
 	@Parameter(property="memorySize", required=false)
 	protected int memorySize;

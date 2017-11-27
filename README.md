@@ -42,10 +42,6 @@ by the settings configuration property in parentheses.
  	* The IAM role to be granted when this Lambda is called from API Gateway and the caller is not authenticated (yet).
  * `description`
  	* Description of the function.
- * `AWSAccessKey`
- 	* AWS Access Key used to communicate with AWS to do the deployments.
- * `AWSSecretKey`
- 	* AWS Secret Key used to communicate with AWS to do the deployments.
  * `serviceName`
  	* The name of the service.
  * uploadJarBucket`
@@ -60,6 +56,10 @@ by the settings configuration property in parentheses.
  	* Defines the list of actions to be effected by this permission set.
  * `action`
  	* Defines an action effected by this permission set.  Exmaple: logs:CreateLogStream
+ * `resources`
+ 	* Defines the list of resources to be effected by this permission set.
+ * `resource`
+ 	* Defines a resource effected by this permission set.  Exmaple: arn:aws:dynamodb:us-west-2:table/user
 * `name`
 	* The name of the Lambda.
 * `apiEvent`

@@ -2,25 +2,20 @@ package com.mcdaniel.serverless;
 
 
 import java.io.File;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
-import com.amazonaws.auth.BasicAWSCredentials;
+
 import com.amazonaws.event.ProgressEvent;
 import com.amazonaws.event.ProgressEventType;
 import com.amazonaws.event.ProgressListener;
-import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.apigateway.AmazonApiGateway;
-import com.amazonaws.services.apigateway.AmazonApiGatewayClient;
 import com.amazonaws.services.apigateway.AmazonApiGatewayClientBuilder;
 import com.amazonaws.services.apigateway.model.ContentHandlingStrategy;
 import com.amazonaws.services.apigateway.model.CreateResourceRequest;
@@ -29,7 +24,6 @@ import com.amazonaws.services.apigateway.model.DeleteResourceRequest;
 import com.amazonaws.services.apigateway.model.DeleteResourceResult;
 import com.amazonaws.services.apigateway.model.GetResourcesRequest;
 import com.amazonaws.services.apigateway.model.GetResourcesResult;
-import com.amazonaws.services.apigateway.model.GetRestApiRequest;
 import com.amazonaws.services.apigateway.model.GetRestApisRequest;
 import com.amazonaws.services.apigateway.model.GetRestApisResult;
 import com.amazonaws.services.apigateway.model.Integration;
@@ -45,7 +39,6 @@ import com.amazonaws.services.apigateway.model.PutMethodResult;
 import com.amazonaws.services.apigateway.model.Resource;
 import com.amazonaws.services.apigateway.model.RestApi;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
-import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClient;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
 import com.amazonaws.services.identitymanagement.model.AttachRolePolicyRequest;
 import com.amazonaws.services.identitymanagement.model.AttachRolePolicyResult;
@@ -62,7 +55,6 @@ import com.amazonaws.services.identitymanagement.model.GetRoleResult;
 import com.amazonaws.services.identitymanagement.model.GetUserResult;
 import com.amazonaws.services.identitymanagement.model.NoSuchEntityException;
 import com.amazonaws.services.lambda.AWSLambda;
-import com.amazonaws.services.lambda.AWSLambdaClient;
 import com.amazonaws.services.lambda.AWSLambdaClientBuilder;
 import com.amazonaws.services.lambda.model.AddPermissionRequest;
 import com.amazonaws.services.lambda.model.AddPermissionResult;
@@ -73,8 +65,6 @@ import com.amazonaws.services.lambda.model.CreateFunctionResult;
 import com.amazonaws.services.lambda.model.Environment;
 import com.amazonaws.services.lambda.model.FunctionCode;
 import com.amazonaws.services.lambda.model.FunctionConfiguration;
-import com.amazonaws.services.lambda.model.GetFunctionConfigurationRequest;
-import com.amazonaws.services.lambda.model.GetFunctionConfigurationResult;
 import com.amazonaws.services.lambda.model.GetPolicyRequest;
 import com.amazonaws.services.lambda.model.GetPolicyResult;
 import com.amazonaws.services.lambda.model.ListFunctionsResult;
@@ -89,7 +79,6 @@ import com.amazonaws.services.lambda.model.UpdateFunctionCodeResult;
 import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationRequest;
 import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationResult;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.Bucket;
 import com.amazonaws.services.s3.model.PutObjectRequest;
@@ -113,7 +102,12 @@ import io.swagger.parser.SwaggerParser;
 public class ServerlessDeployMojo extends BaseServerlessMojo
 {
 	
-	
+	private static final String DEFAULT_PRODUCES_CONTENT_TYPE = "application/json";
+    private static final String EXTENSION_AUTH = "x-amazon-apigateway-auth";
+    private static final String EXTENSION_INTEGRATION = "x-amazon-apigateway-integration";
+    
+    private Swagger swagger;
+    
 	public void execute() throws MojoExecutionException
     {
     	String rolePolicy = null;
@@ -464,6 +458,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	        	{
 	        		cfReq.setMemorySize(memorySize);
 	        	}
+        		getLog().info("Setting memory size to: " + cfReq.getMemorySize());
 	        	
 	        	if ( ! Strings.isNullOrEmpty(description))
 	        		cfReq.setDescription(description);
@@ -655,6 +650,8 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	    		{
 	    			getLog().debug("Found existing API, updating...");
 	    			
+
+//					apiClient.updateRestApi(uraReq);
 	    			
 	    			// So the "REST API" exists, but that doesn't mean that this resource exists
 	    			GetResourcesRequest grReq1 = new GetResourcesRequest()
@@ -885,6 +882,14 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 				for ( Statement s : statements )
 				{
 					getLog().info("Removing permission statement: " + s.getSid());
+					getLog().info("Action: " + s.getAction());
+					getLog().info("Effect: " + s.getEffect());
+					getLog().info("Resource: " + s.getResource());
+					getLog().info("Condition: " + s.getCondition().getArnLike().getAWSSourceArn());
+					getLog().info("Condition: " + s.getCondition().getAdditionalProperties());
+					getLog().info("Principal: " + s.getPrincipal().getService());
+					getLog().info("Principal: " + s.getPrincipal().getAdditionalProperties());
+					getLog().info("Additional Properties: " + s.getAdditionalProperties().toString());
 					rpReq.setFunctionName(serviceName);
 					rpReq.setStatementId(s.getSid());
 					rpRes = lambdaClient.removePermission(rpReq);
@@ -1060,4 +1065,5 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 		return crRes.getId();
 
     }
+        
 }
