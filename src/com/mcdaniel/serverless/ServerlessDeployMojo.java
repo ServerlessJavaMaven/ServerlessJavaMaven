@@ -62,6 +62,8 @@ import com.amazonaws.services.lambda.model.CreateAliasRequest;
 import com.amazonaws.services.lambda.model.CreateAliasResult;
 import com.amazonaws.services.lambda.model.CreateFunctionRequest;
 import com.amazonaws.services.lambda.model.CreateFunctionResult;
+import com.amazonaws.services.lambda.model.DeleteFunctionRequest;
+import com.amazonaws.services.lambda.model.DeleteFunctionResult;
 import com.amazonaws.services.lambda.model.Environment;
 import com.amazonaws.services.lambda.model.FunctionCode;
 import com.amazonaws.services.lambda.model.FunctionConfiguration;
@@ -400,7 +402,13 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	    	AmazonApiGateway apiClient = (AmazonApiGateway) clients.get(region+"-apigw");
 	    	AmazonS3 s3Client = (AmazonS3) clients.get(region+"-s3");
 	    	
-			// See if the function already exists
+			// Try deleting the function
+	    	DeleteFunctionRequest dfReq = new DeleteFunctionRequest();
+	    	dfReq.setFunctionName(serviceName);
+	        DeleteFunctionResult dfRes = lambdaClient.deleteFunction(dfReq);
+	    	getLog().info("Delete function returned: " + dfRes.getSdkHttpMetadata().getHttpStatusCode());
+	    	
+	    	// See if the function already exists
 	        ListFunctionsResult lfRes = lambdaClient.listFunctions();
 	        List<FunctionConfiguration> functions = lfRes.getFunctions();
 	        boolean updateFunction = false;
@@ -411,7 +419,9 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	        	if ( function.getFunctionName().equals(serviceName))
 	        		updateFunction = true;
 	        }
-	
+
+	        updateFunction = false;	// Because we deleted it
+	        
 	        // Create or update the function
 	        String serviceArn = null;
 	        if ( !updateFunction )
