@@ -368,6 +368,11 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 		try
 		{
 			cpRes = iamClient.createPolicy(cpReq);
+			if ( cpRes.getSdkHttpMetadata().getHttpStatusCode() > 201 )
+			{
+				getLog().error("Error from CreatePolicy: " + cpRes.getSdkHttpMetadata().getHttpStatusCode());
+				throw new Exception("Eror from CreatePolicy: " + cpRes.getSdkHttpMetadata().getHttpStatusCode());
+			}
 		}
 		catch ( Exception ex )
 		{
@@ -377,12 +382,20 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 		}
 		
 		// Attach the custom policy
-		getLog().info("Attaching Policy to Role...");
-		AttachRolePolicyRequest arpReq = new AttachRolePolicyRequest()
-				.withRoleName(assumedRoleName)
-				.withPolicyArn(cpRes.getPolicy().getArn());
-		AttachRolePolicyResult arpRes = iamClient.attachRolePolicy(arpReq);
-    	
+		try
+		{
+			getLog().info("Attaching Policy to Role...");
+			AttachRolePolicyRequest arpReq = new AttachRolePolicyRequest()
+					.withRoleName(assumedRoleName)
+					.withPolicyArn(cpRes.getPolicy().getArn());
+			AttachRolePolicyResult arpRes = iamClient.attachRolePolicy(arpReq);
+		}
+		catch ( Exception ex )
+		{
+			getLog().error(String.format("Caught exception Attaching Policy (arn: %s) to Role (name: %s): %s", cpRes.getPolicy().getArn(), assumedRoleName, ex.getMessage()));
+			ex.printStackTrace();
+			return;
+		}
 		//
     	// Upload the function
     	//
