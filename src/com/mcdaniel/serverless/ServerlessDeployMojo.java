@@ -418,8 +418,15 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 			// Try deleting the function
 	    	DeleteFunctionRequest dfReq = new DeleteFunctionRequest();
 	    	dfReq.setFunctionName(serviceName);
-	        DeleteFunctionResult dfRes = lambdaClient.deleteFunction(dfReq);
-	    	getLog().info("Delete function returned: " + dfRes.getSdkHttpMetadata().getHttpStatusCode());
+	    	try
+	    	{
+	    		DeleteFunctionResult dfRes = lambdaClient.deleteFunction(dfReq);
+	    		getLog().info("Delete function returned: " + dfRes.getSdkHttpMetadata().getHttpStatusCode());
+	    	}
+	    	catch ( Exception ex )
+	    	{
+	    		// DO NOTHING.
+	    	}
 	    	
 	    	// See if the function already exists
 	        ListFunctionsResult lfRes = lambdaClient.listFunctions();
