@@ -416,6 +416,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	    	AmazonS3 s3Client = (AmazonS3) clients.get(region+"-s3");
 	    	
 			// Try deleting the function
+	    	getLog().debug("Deleting function: " + serviceName);
 	    	DeleteFunctionRequest dfReq = new DeleteFunctionRequest();
 	    	dfReq.setFunctionName(serviceName);
 	    	try
@@ -865,7 +866,8 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     	AddPermissionRequest apReq = new AddPermissionRequest()
     			.withFunctionName(serviceName)
     			.withAction("lambda:InvokeFunction")
-    			.withSourceArn("arn:aws:execute-api:" + region + ":" + accountNumber + ":" + apiId + permString)
+//    			.withSourceArn("arn:aws:execute-api:" + region + ":" + accountNumber + ":" + apiId + permString)
+    			.withSourceArn("arn:aws:execute-api:" + region + ":" + accountNumber + ":*" + permString)
     			.withPrincipal("apigateway.amazonaws.com")
     			.withStatementId(UUID.randomUUID().toString());
 		// Now update the permissions
