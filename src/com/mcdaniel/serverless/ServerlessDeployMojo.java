@@ -11,6 +11,7 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 
+import com.amazonaws.auth.policy.conditions.SNSConditionFactory;
 import com.amazonaws.event.ProgressEvent;
 import com.amazonaws.event.ProgressEventType;
 import com.amazonaws.event.ProgressListener;
@@ -85,6 +86,21 @@ import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.Bucket;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
+import com.amazonaws.services.sns.AmazonSNS;
+import com.amazonaws.services.sns.AmazonSNSClient;
+import com.amazonaws.services.sns.AmazonSNSClientBuilder;
+import com.amazonaws.services.sns.model.CreateTopicRequest;
+import com.amazonaws.services.sns.model.CreateTopicResult;
+import com.amazonaws.services.sns.model.ListSubscriptionsRequest;
+import com.amazonaws.services.sns.model.ListSubscriptionsResult;
+import com.amazonaws.services.sns.model.ListTopicsRequest;
+import com.amazonaws.services.sns.model.ListTopicsResult;
+import com.amazonaws.services.sns.model.SubscribeRequest;
+import com.amazonaws.services.sns.model.SubscribeResult;
+import com.amazonaws.services.sns.model.Subscription;
+import com.amazonaws.services.sns.model.Topic;
+import com.amazonaws.services.sns.model.UnsubscribeRequest;
+import com.amazonaws.services.sns.model.UnsubscribeResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
 import com.mcdaniel.serverless.policy.LambdaPolicy;
@@ -157,10 +173,12 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
         	Regions regionEnum = Regions.fromName(region);
             AWSLambda lambdaClient = AWSLambdaClientBuilder.standard().withRegion(regionEnum).build();
             AmazonS3 s3Client = AmazonS3ClientBuilder.standard().withRegion(regionEnum).build();
+            AmazonSNS snsClient = AmazonSNSClientBuilder.standard().withRegion(regionEnum).build();
             AmazonApiGateway apiClient = AmazonApiGatewayClientBuilder.standard().withRegion(regionEnum).build();
             clients.put(region+"-lambda", lambdaClient);
             clients.put(region+"-s3", s3Client);
             clients.put(region+"-apigw", apiClient);
+            clients.put(region+"-sns", snsClient);
             
             //
             // Get the account number.
@@ -359,7 +377,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     	rolePolicy = rolePolicy.replace("$environment$", environment);
     	
 		String policyName = serviceName + "_AssumedPolicy";
-		getLog().info("Creating custom policy: " + policyName);
+		getLog().info("Creating custom policy name: " + policyName);
 		getLog().info("Creating custom policy: " + rolePolicy);
 		CreatePolicyRequest cpReq = new CreatePolicyRequest()
 				.withPolicyDocument(rolePolicy)
@@ -414,6 +432,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	    	AWSLambda lambdaClient = (AWSLambda) clients.get(region+"-lambda");
 	    	AmazonApiGateway apiClient = (AmazonApiGateway) clients.get(region+"-apigw");
 	    	AmazonS3 s3Client = (AmazonS3) clients.get(region+"-s3");
+	    	AmazonSNS snsClient = (AmazonSNS) clients.get(region+"-sns");
 	    	
 			// Try deleting the function
 	    	getLog().debug("Deleting function: " + serviceName);
@@ -653,6 +672,83 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	        	CreateAliasResult createaRes = lambdaClient.createAlias(createaReq);
 	        	getLog().info("Create Alias succeeded.");
 	        }
+    	}
+    	
+    	// Handle sns events
+    	if ( snsTopic != null )
+    	{
+        	snsTopic.topicArn = snsTopic.topicArn.replace("$regions$", regions);
+        	snsTopic.topicArn = snsTopic.topicArn.replace("$region$", regions);
+        	snsTopic.topicArn = snsTopic.topicArn.replace("$accountId$", accountNumber);
+
+    		for ( String region : regions.split(","))
+    		{
+	    		getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, snsTopic.displayName, 
+	    				snsTopic.topicName, snsTopic.topicArn));
+	    		AmazonSNS snsClient = (AmazonSNS) clients.get(region + "-sns");
+	    		String endpoint = "arn:aws:lambda:" + region + ":" + accountNumber + ":function:" + serviceName;
+				String protocol = "lambda";
+				String topicArn = snsTopic.topicArn;
+	    		
+				// Check to see if the topic exists; if not, create it
+	    		ListTopicsRequest ltReq = new ListTopicsRequest();
+	    		ListTopicsResult listRes = snsClient.listTopics(ltReq);
+	    		if ( listRes.getSdkHttpMetadata().getHttpStatusCode() != 200 )
+	    		{
+	    			getLog().error("Failed to list SNS Topics!");
+	    		}
+	    		
+	    		boolean foundTopic = false;
+	    		for ( Topic t : listRes.getTopics() )
+	    		{
+	    			getLog().debug("Found topic: " + t.getTopicArn());
+	    			if ( t.getTopicArn().contains(":" + snsTopic.topicName))
+	    				foundTopic = true;
+	    		}
+	    		getLog().debug("FoundTopic: " + foundTopic);
+	    		
+	    		if ( !foundTopic )
+	    		{
+	    			CreateTopicRequest ctReq = new CreateTopicRequest()
+	    					.withName(snsTopic.topicName);
+					CreateTopicResult ctRes = snsClient.createTopic(ctReq);
+					getLog().info("Created Topic " + snsTopic.topicName + ", status: " + ctRes.getSdkHttpMetadata().getHttpStatusCode());
+	    		}
+	    		
+				// See if the subscription already exists; if so, delete it
+	    		boolean foundSub = false;
+	    		String foundSubArn = null;
+	    		if ( foundTopic )
+	    		{
+		    		ListSubscriptionsResult lsRes = snsClient.listSubscriptions();
+		    		for ( Subscription s : lsRes.getSubscriptions() )
+		    		{
+		    			getLog().debug(String.format("Found subscription %s to %s", s.getSubscriptionArn(), s.getEndpoint()));
+		    			if ( s.getEndpoint().equals(endpoint))
+		    			{
+		    				foundSub = true;
+		    				foundSubArn = s.getSubscriptionArn();
+		    			}
+		    		}
+	    		}
+	    		getLog().debug("FoundSub: " + foundSub);
+	    		
+	    		if ( foundSub )
+	    		{
+	    			UnsubscribeRequest uReq = new UnsubscribeRequest()
+	    					.withSubscriptionArn(foundSubArn);
+					UnsubscribeResult uRes = snsClient.unsubscribe(uReq);
+					getLog().info("Unsubscribed from topic: " + uRes.getSdkHttpMetadata().getHttpStatusCode());
+	    		}
+	    		
+	    		// Create the subscriptions
+				SubscribeRequest subReq = new SubscribeRequest()
+	    				.withEndpoint(endpoint)
+	    				.withProtocol(protocol)
+	    				.withTopicArn(topicArn);
+				SubscribeResult subRes = snsClient.subscribe(subReq);
+				getLog().debug(String.format("Subscribed with %s/%s%s, status: %d", endpoint, protocol, topicArn, subRes.getSdkHttpMetadata().getHttpStatusCode()));
+    		}
     	}
     	
     	// Handle API Proxy Events - Where all resources have an ANY proxy attached to them.

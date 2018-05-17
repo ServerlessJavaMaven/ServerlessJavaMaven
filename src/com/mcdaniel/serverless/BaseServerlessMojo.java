@@ -79,8 +79,8 @@ public abstract class BaseServerlessMojo extends AbstractMojo
 	@Parameter(property="scheduleEvent", required=false)
 	protected ScheduleEvent scheduleEvent;
 	
-	@Parameter(property="snsEvent", required=false)
-	protected SNSEvent snsEvent;
+	@Parameter(property="snsTopic", required=false)
+	protected SNSEvent snsTopic;
 
 	public BaseServerlessMojo()
 	{
