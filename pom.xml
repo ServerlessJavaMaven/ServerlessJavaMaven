@@ -14,35 +14,23 @@
 		<aws.sdk.version>1.11.177</aws.sdk.version>
 	</properties>
 
-
 	<distributionManagement>
 		<snapshotRepository>
-			<id>repo.microstarlogistics.com</id>
-			<url>s3://repo.microstarlogistics.com/snapshot</url>
+			<id>tap3-repo-bucket-snapshot</id>
+			<url>s3://tap3-dev-maven-repo/snapshot</url>
 		</snapshotRepository>
-		<!-- <repository> -->
-		<!-- <id>repo.microstarlogistics.com</id> -->
-		<!-- <url>s3://repo.microstarlogistics.com/release</url> -->
-		<!-- </repository> -->
-	</distributionManagement>
-
-	<repositories>
 		<repository>
-			<id>repo.microstarlogistics.com</id>
-			<url>s3://repo.microstarlogistics.com/snapshot</url>
+			<id>tap3-repo-bucket-release</id>
+		<url>s3://tap3-dev-maven-repo/release</url>
 		</repository>
-		<!-- <repository> -->
-		<!-- <id>repo.microstarlogistics.com</id> -->
-		<!-- <url>s3://repo.microstarlogistics.com/release</url> -->
-		<!-- </repository> -->
-	</repositories>
+	</distributionManagement>
 
 	<build>
 		<extensions>
 			<extension>
-				<groupId>org.kuali.maven.wagons</groupId>
-				<artifactId>maven-s3-wagon</artifactId>
-				<version>LATEST</version>
+				<groupId>com.gkatzioura.maven.cloud</groupId>
+				<artifactId>s3-storage-wagon</artifactId>
+				<version>1.0</version>
 			</extension>
 		</extensions>
 		<sourceDirectory>src</sourceDirectory>
@@ -183,6 +171,10 @@
 		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-java-sdk-s3</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk-sns</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>com.amazonaws</groupId>

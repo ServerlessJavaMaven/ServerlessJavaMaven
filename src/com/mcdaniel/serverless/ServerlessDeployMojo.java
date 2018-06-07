@@ -675,7 +675,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     	}
     	
     	// Handle sns events
-    	if ( snsTopic != null )
+    	if ( snsTopic != null && snsTopic.displayName != null )
     	{
         	snsTopic.topicArn = snsTopic.topicArn.replace("$regions$", regions);
         	snsTopic.topicArn = snsTopic.topicArn.replace("$region$", regions);
@@ -747,7 +747,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	    				.withProtocol(protocol)
 	    				.withTopicArn(topicArn);
 				SubscribeResult subRes = snsClient.subscribe(subReq);
-				getLog().debug(String.format("Subscribed with %s/%s%s, status: %d", endpoint, protocol, topicArn, subRes.getSdkHttpMetadata().getHttpStatusCode()));
+				getLog().info(String.format("Subscribed with %s/%s%s, status: %d", endpoint, protocol, topicArn, subRes.getSdkHttpMetadata().getHttpStatusCode()));
     		}
     	}
     	
