@@ -675,79 +675,85 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     	}
     	
     	// Handle sns events
-    	if ( snsTopic != null && snsTopic.displayName != null )
+    	if ( snsTopic != null && snsTopic.size() > 0 )
     	{
-        	snsTopic.topicArn = snsTopic.topicArn.replace("$regions$", regions);
-        	snsTopic.topicArn = snsTopic.topicArn.replace("$region$", regions);
-        	snsTopic.topicArn = snsTopic.topicArn.replace("$accountId$", accountNumber);
+//        	snsTopic.topicArn = snsTopic.topicArn.replace("$regions$", regions);
+//        	snsTopic.topicArn = snsTopic.topicArn.replace("$region$", regions);
+//        	snsTopic.topicArn = snsTopic.topicArn.replace("$accountId$", accountNumber);
 
     		for ( String region : regions.split(","))
     		{
-	    		getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, snsTopic.displayName, 
-	    				snsTopic.topicName, snsTopic.topicArn));
-	    		AmazonSNS snsClient = (AmazonSNS) clients.get(region + "-sns");
-	    		String endpoint = "arn:aws:lambda:" + region + ":" + accountNumber + ":function:" + serviceName;
-				String protocol = "lambda";
-				String topicArn = snsTopic.topicArn;
-	    		
-				// Check to see if the topic exists; if not, create it
-	    		ListTopicsRequest ltReq = new ListTopicsRequest();
-	    		ListTopicsResult listRes = snsClient.listTopics(ltReq);
-	    		if ( listRes.getSdkHttpMetadata().getHttpStatusCode() != 200 )
-	    		{
-	    			getLog().error("Failed to list SNS Topics!");
-	    		}
-	    		
-	    		boolean foundTopic = false;
-	    		for ( Topic t : listRes.getTopics() )
-	    		{
-	    			getLog().debug("Found topic: " + t.getTopicArn());
-	    			if ( t.getTopicArn().contains(":" + snsTopic.topicName))
-	    				foundTopic = true;
-	    		}
-	    		getLog().debug("FoundTopic: " + foundTopic);
-	    		
-	    		if ( !foundTopic )
-	    		{
-	    			CreateTopicRequest ctReq = new CreateTopicRequest()
-	    					.withName(snsTopic.topicName);
-					CreateTopicResult ctRes = snsClient.createTopic(ctReq);
-					getLog().info("Created Topic " + snsTopic.topicName + ", status: " + ctRes.getSdkHttpMetadata().getHttpStatusCode());
-	    		}
-	    		
-				// See if the subscription already exists; if so, delete it
-	    		boolean foundSub = false;
-	    		String foundSubArn = null;
-	    		if ( foundTopic )
-	    		{
-		    		ListSubscriptionsResult lsRes = snsClient.listSubscriptions();
-		    		for ( Subscription s : lsRes.getSubscriptions() )
+//	    		getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, snsTopic.displayName, 
+//	    				snsTopic.topicName, snsTopic.topicArn));
+
+    			for ( SNSEvent t : snsTopic )
+    			{
+	    			getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, t.displayName, 
+		    				t.topicName, t.topicArn));
+		    		AmazonSNS snsClient = (AmazonSNS) clients.get(region + "-sns");
+		    		String endpoint = "arn:aws:lambda:" + region + ":" + accountNumber + ":function:" + serviceName;
+					String protocol = "lambda";
+					String topicArn = t.topicArn;
+		    		
+					// Check to see if the topic exists; if not, create it
+		    		ListTopicsRequest ltReq = new ListTopicsRequest();
+		    		ListTopicsResult listRes = snsClient.listTopics(ltReq);
+		    		if ( listRes.getSdkHttpMetadata().getHttpStatusCode() != 200 )
 		    		{
-		    			getLog().debug(String.format("Found subscription %s to %s", s.getSubscriptionArn(), s.getEndpoint()));
-		    			if ( s.getEndpoint().equals(endpoint))
-		    			{
-		    				foundSub = true;
-		    				foundSubArn = s.getSubscriptionArn();
-		    			}
+		    			getLog().error("Failed to list SNS Topics!");
 		    		}
-	    		}
-	    		getLog().debug("FoundSub: " + foundSub);
-	    		
-	    		if ( foundSub )
-	    		{
-	    			UnsubscribeRequest uReq = new UnsubscribeRequest()
-	    					.withSubscriptionArn(foundSubArn);
-					UnsubscribeResult uRes = snsClient.unsubscribe(uReq);
-					getLog().info("Unsubscribed from topic: " + uRes.getSdkHttpMetadata().getHttpStatusCode());
-	    		}
-	    		
-	    		// Create the subscriptions
-				SubscribeRequest subReq = new SubscribeRequest()
-	    				.withEndpoint(endpoint)
-	    				.withProtocol(protocol)
-	    				.withTopicArn(topicArn);
-				SubscribeResult subRes = snsClient.subscribe(subReq);
-				getLog().info(String.format("Subscribed with %s/%s%s, status: %d", endpoint, protocol, topicArn, subRes.getSdkHttpMetadata().getHttpStatusCode()));
+		    		
+		    		boolean foundTopic = false;
+		    		for ( Topic et : listRes.getTopics() )
+		    		{
+		    			getLog().debug("Found topic: " + et.getTopicArn());
+		    			if ( et.getTopicArn().contains(":" + t.topicName))
+		    				foundTopic = true;
+		    		}
+		    		getLog().debug("Found Existing Topic: " + foundTopic);
+		    		
+		    		if ( !foundTopic )
+		    		{
+		    			CreateTopicRequest ctReq = new CreateTopicRequest()
+		    					.withName(t.topicName);
+						CreateTopicResult ctRes = snsClient.createTopic(ctReq);
+						getLog().info("Created Topic " + t.topicName + ", status: " + ctRes.getSdkHttpMetadata().getHttpStatusCode());
+		    		}
+		    		
+					// See if the subscription already exists; if so, delete it
+		    		boolean foundSub = false;
+		    		String foundSubArn = null;
+		    		if ( foundTopic )
+		    		{
+			    		ListSubscriptionsResult lsRes = snsClient.listSubscriptions();
+			    		for ( Subscription s : lsRes.getSubscriptions() )
+			    		{
+			    			getLog().debug(String.format("Found subscription %s to %s", s.getSubscriptionArn(), s.getEndpoint()));
+			    			if ( s.getEndpoint().equals(endpoint))
+			    			{
+			    				foundSub = true;
+			    				foundSubArn = s.getSubscriptionArn();
+			    			}
+			    		}
+		    		}
+		    		getLog().debug("FoundSub: " + foundSub);
+		    		
+		    		if ( foundSub )
+		    		{
+		    			UnsubscribeRequest uReq = new UnsubscribeRequest()
+		    					.withSubscriptionArn(foundSubArn);
+						UnsubscribeResult uRes = snsClient.unsubscribe(uReq);
+						getLog().info("Unsubscribed from topic: " + uRes.getSdkHttpMetadata().getHttpStatusCode());
+		    		}
+		    		
+		    		// Create the subscriptions
+					SubscribeRequest subReq = new SubscribeRequest()
+		    				.withEndpoint(endpoint)
+		    				.withProtocol(protocol)
+		    				.withTopicArn(topicArn);
+					SubscribeResult subRes = snsClient.subscribe(subReq);
+					getLog().info(String.format("Subscribed with %s/%s%s, status: %d", endpoint, protocol, topicArn, subRes.getSdkHttpMetadata().getHttpStatusCode()));
+    			}
     		}
     	}
     	

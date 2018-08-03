@@ -80,7 +80,7 @@ public abstract class BaseServerlessMojo extends AbstractMojo
 	protected ScheduleEvent scheduleEvent;
 	
 	@Parameter(property="snsTopic", required=false)
-	protected SNSEvent snsTopic;
+	protected List<SNSEvent> snsTopic;
 
 	public BaseServerlessMojo()
 	{
