@@ -677,9 +677,6 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     	// Handle sns events
     	if ( snsTopic != null && snsTopic.size() > 0 )
     	{
-//        	snsTopic.topicArn = snsTopic.topicArn.replace("$regions$", regions);
-//        	snsTopic.topicArn = snsTopic.topicArn.replace("$region$", regions);
-//        	snsTopic.topicArn = snsTopic.topicArn.replace("$accountId$", accountNumber);
 
     		for ( String region : regions.split(","))
     		{
@@ -691,6 +688,9 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	    			getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, t.displayName, 
 		    				t.topicName, t.topicArn));
 		    		AmazonSNS snsClient = (AmazonSNS) clients.get(region + "-sns");
+		        	t.topicArn = t.topicArn.replace("$regions$", regions);
+		        	t.topicArn = t.topicArn.replace("$region$", regions);
+		        	t.topicArn = t.topicArn.replace("$accountId$", accountNumber);
 		    		String endpoint = "arn:aws:lambda:" + region + ":" + accountNumber + ":function:" + serviceName;
 					String protocol = "lambda";
 					String topicArn = t.topicArn;
