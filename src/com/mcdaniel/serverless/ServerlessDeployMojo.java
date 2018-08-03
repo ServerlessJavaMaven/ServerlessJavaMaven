@@ -675,7 +675,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     	}
     	
     	// Handle sns events
-    	if ( snsTopic != null && snsTopic.size() > 0 )
+    	if ( snsTopics != null && snsTopics.size() > 0 )
     	{
 
     		for ( String region : regions.split(","))
@@ -683,7 +683,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 //	    		getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, snsTopic.displayName, 
 //	    				snsTopic.topicName, snsTopic.topicArn));
 
-    			for ( SNSEvent t : snsTopic )
+    			for ( SNSEvent t : snsTopics )
     			{
 	    			getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, t.displayName, 
 		    				t.topicName, t.topicArn));
