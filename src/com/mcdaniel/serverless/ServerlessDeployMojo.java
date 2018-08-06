@@ -752,7 +752,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 		    				.withProtocol(protocol)
 		    				.withTopicArn(topicArn);
 					SubscribeResult subRes = snsClient.subscribe(subReq);
-					getLog().info(String.format("Subscribed with %s/%s%s, status: %d", endpoint, protocol, topicArn, subRes.getSdkHttpMetadata().getHttpStatusCode()));
+					getLog().info(String.format("Subscribed with %s/%s/%s, status: %d", endpoint, protocol, topicArn, subRes.getSdkHttpMetadata().getHttpStatusCode()));
     			}
     		}
     	}
