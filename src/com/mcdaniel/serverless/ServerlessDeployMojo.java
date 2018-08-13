@@ -677,25 +677,24 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
     	// Handle sns events
     	if ( snsTopics != null && snsTopics.size() > 0 )
     	{
-
+    		getLog().info("Processing snsTopics!");
     		for ( String region : regions.split(","))
     		{
-//	    		getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, snsTopic.displayName, 
-//	    				snsTopic.topicName, snsTopic.topicArn));
-
     			for ( SNSEvent t : snsTopics )
     			{
-	    			getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, t.displayName, 
-		    				t.topicName, t.topicArn));
-		    		AmazonSNS snsClient = (AmazonSNS) clients.get(region + "-sns");
 		        	t.topicArn = t.topicArn.replace("$regions$", regions);
 		        	t.topicArn = t.topicArn.replace("$region$", regions);
 		        	t.topicArn = t.topicArn.replace("$accountId$", accountNumber);
+	    			getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, t.displayName, 
+		    				t.topicName, t.topicArn));
+	    	    	AWSLambda lambdaClient = (AWSLambda) clients.get(region+"-lambda");
+		    		AmazonSNS snsClient = (AmazonSNS) clients.get(region + "-sns");
 		    		String endpoint = "arn:aws:lambda:" + region + ":" + accountNumber + ":function:" + serviceName;
 					String protocol = "lambda";
 					String topicArn = t.topicArn;
 		    		
 					// Check to see if the topic exists; if not, create it
+					getLog().debug("Getting Topics");
 		    		ListTopicsRequest ltReq = new ListTopicsRequest();
 		    		ListTopicsResult listRes = snsClient.listTopics(ltReq);
 		    		if ( listRes.getSdkHttpMetadata().getHttpStatusCode() != 200 )
@@ -725,34 +724,66 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 		    		String foundSubArn = null;
 		    		if ( foundTopic )
 		    		{
-			    		ListSubscriptionsResult lsRes = snsClient.listSubscriptions();
-			    		for ( Subscription s : lsRes.getSubscriptions() )
-			    		{
-			    			getLog().debug(String.format("Found subscription %s to %s", s.getSubscriptionArn(), s.getEndpoint()));
-			    			if ( s.getEndpoint().equals(endpoint))
-			    			{
-			    				foundSub = true;
-			    				foundSubArn = s.getSubscriptionArn();
-			    			}
-			    		}
+			    		ListSubscriptionsResult lsRes = null;
+			    		ListSubscriptionsRequest lsReq = new ListSubscriptionsRequest();
+			    		do {
+			    			lsRes = snsClient.listSubscriptions(lsReq);
+				    		getLog().debug("Listing Subscriptions: Token = " + lsRes.getNextToken());
+				    		for ( Subscription s : lsRes.getSubscriptions() )
+				    		{
+				    			getLog().debug(String.format("Found subscription %s to %s", s.getSubscriptionArn(), s.getEndpoint()));
+				    			if ( s.getEndpoint().contains(endpoint) && s.getTopicArn().equals(topicArn))
+				    			{
+				    				foundSub = true;
+				    				foundSubArn = s.getSubscriptionArn();
+					    			UnsubscribeRequest uReq = new UnsubscribeRequest()
+					    					.withSubscriptionArn(foundSubArn);
+									UnsubscribeResult uRes = snsClient.unsubscribe(uReq);
+									getLog().info("Unsubscribed from topic: " + uRes.getSdkHttpMetadata().getHttpStatusCode());
+				    			}
+				    		}
+//				    		if ( lsRes.getNextToken() != null )
+//				    		{
+//					    		lsRes = snsClient.listSubscriptions(lsRes.getNextToken());
+//					    		getLog().debug("Did next list, token = " + lsRes.getNextToken());
+//				    		}
+				    		lsReq.setNextToken(lsRes.getNextToken());
+			    		} while ( lsRes.getNextToken() != null);
 		    		}
 		    		getLog().debug("FoundSub: " + foundSub);
 		    		
-		    		if ( foundSub )
-		    		{
-		    			UnsubscribeRequest uReq = new UnsubscribeRequest()
-		    					.withSubscriptionArn(foundSubArn);
-						UnsubscribeResult uRes = snsClient.unsubscribe(uReq);
-						getLog().info("Unsubscribed from topic: " + uRes.getSdkHttpMetadata().getHttpStatusCode());
-		    		}
+//		    		if ( foundSub )
+//		    		{
+//		    			UnsubscribeRequest uReq = new UnsubscribeRequest()
+//		    					.withSubscriptionArn(foundSubArn);
+//						UnsubscribeResult uRes = snsClient.unsubscribe(uReq);
+//						getLog().info("Unsubscribed from topic: " + uRes.getSdkHttpMetadata().getHttpStatusCode());
+//		    		}
 		    		
 		    		// Create the subscriptions
+		    		endpoint += ":dev";
 					SubscribeRequest subReq = new SubscribeRequest()
 		    				.withEndpoint(endpoint)
 		    				.withProtocol(protocol)
 		    				.withTopicArn(topicArn);
 					SubscribeResult subRes = snsClient.subscribe(subReq);
-					getLog().info(String.format("Subscribed with %s/%s/%s, status: %d", endpoint, protocol, topicArn, subRes.getSdkHttpMetadata().getHttpStatusCode()));
+					
+					getLog().info(String.format("Subscribed with %s/%s/%s, SubArn = %s, status: %d", endpoint, protocol, topicArn, 
+							subRes.getSubscriptionArn(), subRes.getSdkHttpMetadata().getHttpStatusCode()));
+
+					AddPermissionRequest apReq = new AddPermissionRequest();
+					apReq.setAction("lambda:invokeFunction");
+					apReq.setStatementId("TopicPerm" + Long.toString(System.currentTimeMillis()));
+					apReq.setSourceArn(topicArn);
+					apReq.setFunctionName(endpoint);
+					apReq.setPrincipal("sns.amazonaws.com");
+					AddPermissionResult apRes = lambdaClient.addPermission(apReq);
+					if ( apRes.getSdkHttpMetadata().getHttpStatusCode() >= 300 )
+					{
+						getLog().error("Received error from AddPermission: " + apRes.getSdkHttpMetadata().getHttpStatusCode());
+						return;
+					}
+					getLog().debug("Got statement: " + apRes.getStatement() + " from AddPermission call");
     			}
     		}
     	}
