@@ -75,6 +75,8 @@ import com.amazonaws.services.lambda.model.PublishVersionRequest;
 import com.amazonaws.services.lambda.model.PublishVersionResult;
 import com.amazonaws.services.lambda.model.RemovePermissionRequest;
 import com.amazonaws.services.lambda.model.RemovePermissionResult;
+import com.amazonaws.services.lambda.model.TracingConfig;
+import com.amazonaws.services.lambda.model.TracingMode;
 import com.amazonaws.services.lambda.model.UpdateAliasRequest;
 import com.amazonaws.services.lambda.model.UpdateAliasResult;
 import com.amazonaws.services.lambda.model.UpdateFunctionCodeRequest;
@@ -117,7 +119,7 @@ import io.swagger.parser.SwaggerParser;
  *
  */
 @Mojo( name = "deploy", defaultPhase=LifecyclePhase.DEPLOY, requiresOnline=true, requiresProject=true)
-public class ServerlessDeployMojo extends BaseServerlessMojo
+public class ServerlessDeployMojo extends BaseLambdaMojo
 {
 	
 	private static final String DEFAULT_PRODUCES_CONTENT_TYPE = "application/json";
@@ -471,6 +473,10 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 	            CreateFunctionRequest cfReq = new CreateFunctionRequest();
 	        	cfReq.setFunctionName(serviceName);
 	        	cfReq.setPublish(true);
+	        	if ( enableXRay )
+	        	{
+	        		cfReq.setTracingConfig(new TracingConfig().withMode(TracingMode.Active));
+	        	}
 	        	cfReq.setHandler(handlerMethod);
 	        	
 	        	if ( environmentVariables != null && environmentVariables.size() != 0 )
@@ -761,7 +767,7 @@ public class ServerlessDeployMojo extends BaseServerlessMojo
 //		    		}
 		    		
 		    		// Create the subscriptions
-		    		endpoint += ":dev";
+//		    		endpoint += ":dev";
 					SubscribeRequest subReq = new SubscribeRequest()
 		    				.withEndpoint(endpoint)
 		    				.withProtocol(protocol)
