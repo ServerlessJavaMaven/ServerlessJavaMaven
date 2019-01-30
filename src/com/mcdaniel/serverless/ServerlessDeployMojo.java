@@ -88,6 +88,7 @@ import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.Bucket;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
+import com.amazonaws.services.s3.model.Region;
 import com.amazonaws.services.sns.AmazonSNS;
 import com.amazonaws.services.sns.AmazonSNSClient;
 import com.amazonaws.services.sns.AmazonSNSClientBuilder;
@@ -156,7 +157,7 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 //        AmazonApiGatewayClient apiClient = new AmazonApiGatewayClient(awsCredentials);
         
 
-        getLog().info("Done.");
+//        getLog().info("Done.");
         
         String accountNumber = null;
         
@@ -172,6 +173,7 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
         HashMap<String,Bucket> uploadBucket = new HashMap<>();
         for ( String region : regions.split(","))
         {
+        	getLog().info("Region: " + region);
         	Regions regionEnum = Regions.fromName(region);
             AWSLambda lambdaClient = AWSLambdaClientBuilder.standard().withRegion(regionEnum).build();
             AmazonS3 s3Client = AmazonS3ClientBuilder.standard().withRegion(regionEnum).build();
@@ -691,14 +693,27 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 		        	t.topicArn = t.topicArn.replace("$regions$", regions);
 		        	t.topicArn = t.topicArn.replace("$region$", regions);
 		        	t.topicArn = t.topicArn.replace("$accountId$", accountNumber);
-	    			getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", region, t.displayName, 
+
+					// Parse out the built arn to query the existing topics
+					String [] arnParts = t.topicArn.split(":");
+					String snsregion = arnParts[3];
+					
+		        	getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", snsregion, t.displayName, 
 		    				t.topicName, t.topicArn));
 	    	    	AWSLambda lambdaClient = (AWSLambda) clients.get(region+"-lambda");
-		    		AmazonSNS snsClient = (AmazonSNS) clients.get(region + "-sns");
 		    		String endpoint = "arn:aws:lambda:" + region + ":" + accountNumber + ":function:" + serviceName;
 					String protocol = "lambda";
 					String topicArn = t.topicArn;
 		    		
+					getLog().debug("Using SNS region " + snsregion);
+					AmazonSNS snsClient = (AmazonSNS) clients.get(snsregion + "-sns");
+					if ( snsClient == null )
+					{
+						getLog().debug("Dynamically getting new SNS Client for region " + snsregion);
+						snsClient = AmazonSNSClientBuilder.standard().withRegion(Regions.fromName(snsregion)).build();
+						clients.put(snsregion+"-sns", snsClient);
+					}
+					
 					// Check to see if the topic exists; if not, create it
 					getLog().debug("Getting Topics");
 		    		ListTopicsRequest ltReq = new ListTopicsRequest();
@@ -767,7 +782,7 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 //		    		}
 		    		
 		    		// Create the subscriptions
-//		    		endpoint += ":dev";
+		    		getLog().debug(String.format("Subscribing to topic %s endpoint %s using protocol %s", topicArn, endpoint, protocol));
 					SubscribeRequest subReq = new SubscribeRequest()
 		    				.withEndpoint(endpoint)
 		    				.withProtocol(protocol)
