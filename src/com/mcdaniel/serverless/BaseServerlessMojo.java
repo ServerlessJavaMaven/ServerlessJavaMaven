@@ -19,13 +19,22 @@ public abstract class BaseServerlessMojo extends AbstractMojo
 	 * and the API definition.
 	 */
 	protected String environment;
-	
+
 	@Parameter(property="regions", required=true)
 	protected String regions;
-	
+
+	@Parameter(property="policyRegions", required=false)
+	protected String policyRegions;
+
+	@Parameter(property="concurrencyLimit", required = false, defaultValue = "0")
+	protected int concurrencyLimit;
+
 	@Parameter(property="basedir", required=true)
 	protected File basedir;
-	
+
+	@Parameter(property="targetVPC", required=false)
+	protected SJMVpcConfig targetVPC;
+
 	@Parameter(property="uploadJarBucket", required=true)
 	protected String uploadJarBucket;
 	

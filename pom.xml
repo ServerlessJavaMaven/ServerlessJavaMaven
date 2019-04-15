@@ -11,7 +11,7 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.source>1.8</maven.compiler.source>
 		<maven.compiler.target>1.8</maven.compiler.target>
-		<aws.sdk.version>1.11.177</aws.sdk.version>
+		<aws.sdk.version>1.11.512</aws.sdk.version>
 	</properties>
 
 	<distributionManagement>
@@ -159,6 +159,10 @@
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-java-sdk-iam</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk-ec2</artifactId>
+		</dependency>
 <!-- 		<dependency> -->
 <!-- 			<groupId>com.amazonaws</groupId> -->
 <!-- 			<artifactId>aws-apigateway-sdk-java</artifactId> -->
@@ -175,6 +179,10 @@
 		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-java-sdk-sns</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk-sqs</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>com.amazonaws</groupId>

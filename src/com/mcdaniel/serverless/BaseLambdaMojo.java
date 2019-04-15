@@ -49,9 +49,12 @@ public abstract class BaseLambdaMojo extends BaseServerlessMojo {
 	
 	@Parameter(property="scheduleEvent", required=false)
 	protected ScheduleEvent scheduleEvent;
-	
+
 	@Parameter(property="snsTopics", required=false)
 	protected List<SNSEvent> snsTopics;
+
+	@Parameter(property="sqsQueues", required=false)
+	protected List<SQSEvent> sqsQueues;
 
 
 }

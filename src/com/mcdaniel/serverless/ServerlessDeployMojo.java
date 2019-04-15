@@ -2,11 +2,14 @@ package com.mcdaniel.serverless;
 
 
 import java.io.File;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
+import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
+import com.amazonaws.services.ec2.model.*;
+import com.amazonaws.services.lambda.model.*;
+import com.amazonaws.services.sqs.AmazonSQS;
+import com.amazonaws.services.sqs.AmazonSQSClientBuilder;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
@@ -57,32 +60,6 @@ import com.amazonaws.services.identitymanagement.model.GetUserResult;
 import com.amazonaws.services.identitymanagement.model.NoSuchEntityException;
 import com.amazonaws.services.lambda.AWSLambda;
 import com.amazonaws.services.lambda.AWSLambdaClientBuilder;
-import com.amazonaws.services.lambda.model.AddPermissionRequest;
-import com.amazonaws.services.lambda.model.AddPermissionResult;
-import com.amazonaws.services.lambda.model.CreateAliasRequest;
-import com.amazonaws.services.lambda.model.CreateAliasResult;
-import com.amazonaws.services.lambda.model.CreateFunctionRequest;
-import com.amazonaws.services.lambda.model.CreateFunctionResult;
-import com.amazonaws.services.lambda.model.DeleteFunctionRequest;
-import com.amazonaws.services.lambda.model.DeleteFunctionResult;
-import com.amazonaws.services.lambda.model.Environment;
-import com.amazonaws.services.lambda.model.FunctionCode;
-import com.amazonaws.services.lambda.model.FunctionConfiguration;
-import com.amazonaws.services.lambda.model.GetPolicyRequest;
-import com.amazonaws.services.lambda.model.GetPolicyResult;
-import com.amazonaws.services.lambda.model.ListFunctionsResult;
-import com.amazonaws.services.lambda.model.PublishVersionRequest;
-import com.amazonaws.services.lambda.model.PublishVersionResult;
-import com.amazonaws.services.lambda.model.RemovePermissionRequest;
-import com.amazonaws.services.lambda.model.RemovePermissionResult;
-import com.amazonaws.services.lambda.model.TracingConfig;
-import com.amazonaws.services.lambda.model.TracingMode;
-import com.amazonaws.services.lambda.model.UpdateAliasRequest;
-import com.amazonaws.services.lambda.model.UpdateAliasResult;
-import com.amazonaws.services.lambda.model.UpdateFunctionCodeRequest;
-import com.amazonaws.services.lambda.model.UpdateFunctionCodeResult;
-import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationRequest;
-import com.amazonaws.services.lambda.model.UpdateFunctionConfigurationResult;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.Bucket;
@@ -115,10 +92,6 @@ import io.swagger.models.Swagger;
 import io.swagger.models.parameters.Parameter;
 import io.swagger.parser.SwaggerParser;
  
-/**
- * Says "Hi" to the user.
- *
- */
 @Mojo( name = "deploy", defaultPhase=LifecyclePhase.DEPLOY, requiresOnline=true, requiresProject=true)
 public class ServerlessDeployMojo extends BaseLambdaMojo
 {
@@ -141,24 +114,9 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
         	getLog().info("Name/Packaging: " + project.getName() + " / " + project.getPackaging());
         	getLog().info("Artifact name: " + project.getArtifact().getFile().getName());
         }
-        
-        // Create the credentials for all of the clients.
-//        getLog().info("AccessKey: " + AWSAccessKey);
-//        BasicAWSCredentials awsCredentials = new BasicAWSCredentials(AWSAccessKey, AWSSecretKey);
-        
+
         // Setup needed variables
         String assumedRoleName = serviceName + "_AssumedRole";
-        
-        // Create all of the needed clients.
-        getLog().info("Getting clients...");
-//        AWSLambdaClient lambdaClient = new AWSLambdaClient(awsCredentials);
-//        AmazonS3Client s3Client = new AmazonS3Client(awsCredentials);
-//        AmazonIdentityManagementClient iamClient = new AmazonIdentityManagementClient(awsCredentials);
-//        AmazonApiGatewayClient apiClient = new AmazonApiGatewayClient(awsCredentials);
-        
-
-//        getLog().info("Done.");
-        
         String accountNumber = null;
         
         //
@@ -173,17 +131,23 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
         HashMap<String,Bucket> uploadBucket = new HashMap<>();
         for ( String region : regions.split(","))
         {
+	        getLog().info("Getting clients...");
+
         	getLog().info("Region: " + region);
         	Regions regionEnum = Regions.fromName(region);
             AWSLambda lambdaClient = AWSLambdaClientBuilder.standard().withRegion(regionEnum).build();
             AmazonS3 s3Client = AmazonS3ClientBuilder.standard().withRegion(regionEnum).build();
-            AmazonSNS snsClient = AmazonSNSClientBuilder.standard().withRegion(regionEnum).build();
+			AmazonSNS snsClient = AmazonSNSClientBuilder.standard().withRegion(regionEnum).build();
+			AmazonSQS sqsClient = AmazonSQSClientBuilder.standard().withRegion(regionEnum).build();
             AmazonApiGateway apiClient = AmazonApiGatewayClientBuilder.standard().withRegion(regionEnum).build();
+			AmazonEC2 ec2Client = AmazonEC2ClientBuilder.standard().withRegion(regionEnum).build();
             clients.put(region+"-lambda", lambdaClient);
             clients.put(region+"-s3", s3Client);
             clients.put(region+"-apigw", apiClient);
-            clients.put(region+"-sns", snsClient);
-            
+			clients.put(region+"-sns", snsClient);
+			clients.put(region+"-sqs", sqsClient);
+            clients.put(region+"-ec2", ec2Client);
+
             //
             // Get the account number.
             //
@@ -198,7 +162,6 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
             getLog().info("Environment: " + environment);
             String uploadJarBucketName = environment + "." + region + "." + uploadJarBucket;
             uploadJarBucketName = uploadJarBucketName.toLowerCase();
-//	        s3Client.setRegion(Region.getRegion(Regions.fromName(region)));
             getLog().info("Checking if bucket " + uploadJarBucketName.toLowerCase() + " exists...");
 	    	if ( !s3Client.doesBucketExist(uploadJarBucketName.toLowerCase()))	// If bucket doesn't exist, create it.
 	    	{
@@ -211,6 +174,7 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 	    		catch ( Exception ex )
 	    		{
 	    			getLog().error("Caught exception creating bucket " + uploadJarBucketName);
+	    			ex.printStackTrace();
 	    			throw ex;
 	    		}
 //	    		uploadBucket.put(region, cbRes);
@@ -235,7 +199,7 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 	    	{
     			getLog().error("Caught exception uploading JAR " + project.getArtifact().getFile());
 	    		ex.printStackTrace();
-	    		return;
+	    		throw ex;
 	    	}
         }
         
@@ -292,12 +256,14 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
     		{
     			DeletePolicyResult dpRes = iamClient.deletePolicy(dpReq);
     			int x = 1;
-    		} catch ( Exception ex ) { ex.printStackTrace();}
+    		} catch ( Exception ex )
+			{ // ignore exception deleting
+			}
     		sleep(5);
     	}
     	else
     	{
-    		String assumeRolePolicy = "{\"Version\": \"2012-10-17\"," +
+    		String trustPolicy = "{\"Version\": \"2012-10-17\"," +
     				"\"Statement\": [{" +
     				"\"Sid\": \"\", " +
     				"\"Effect\": \"Allow\", " +
@@ -306,15 +272,16 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
     				"}]}";
     		CreateRoleRequest crReq = new CreateRoleRequest()
     				.withRoleName(assumedRoleName);
-    		crReq.setAssumeRolePolicyDocument(assumeRolePolicy);
+    		crReq.setAssumeRolePolicyDocument(trustPolicy);
     		
     		getLog().info("Creating role with policy: " + rolePolicy);
-    		getLog().info("Trust policy: " + assumeRolePolicy);
+    		getLog().info("Trust policy: " + trustPolicy);
     		CreateRoleResult crRes = iamClient.createRole(crReq);
     		roleArn = crRes.getRole().getArn();
     	}
     	
 		// Create the custom policy
+		getLog().debug("Creating Role Policy");
     	rolePolicy = "{" +
 			"    \"Version\": \"2012-10-17\",\n" +
     		"    \"Statement\": [\n";
@@ -322,12 +289,14 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
     	// Loop through all of the Permission entries
     	Permission [] perms = permissions.toArray(new Permission[0]);
     	String permPolicy = "";
+    	getLog().debug(String.format("Deploy regions: %s, Policy regions: %s", regions, policyRegions));
     	try
     	{
 	    	for ( int pi = 0; pi < perms.length; pi ++ )
 	    	{
 	    		Permission p = perms[pi];
-	    		
+				getLog().debug("Processing permission: " + p);
+
 	    		String permComma = pi == perms.length-1 ? "" : ",";	// If we're at the end, comma="", else comma=","
 	
 	    		permPolicy = "{\"Effect\": \"" + p.effect + "\",";
@@ -335,17 +304,40 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 		    	String[] regionList = regions.split(",");
 		    	permPolicy += "\"Resource\": [";
 		    	String tmp = "";
-		    	for ( int i = 0; i < regionList.length; i ++ )
-		    	{
-		    		String region = regionList[i];
-		    		String regionComma = i == regionList.length-1 ? "" : ",";	// If we're at the end, comma="", else comma=","
-		    		
-		    		List<String> resourceList = p.resources;
-		    		for ( String resource : resourceList )
-		    		{ 
-		    			tmp += ",\"" + resource + "\"";
-		    		}
-		    	}
+		    	if ( regionList.length > 1 || policyRegions == null )
+				{
+					getLog().debug("Processing multiple deployment regions");
+					for (int i = 0; i < regionList.length; i++)
+					{
+						String region = regionList[i];
+						String regionComma = i == regionList.length - 1 ? "" : ",";    // If we're at the end, comma="", else comma=","
+
+						List<String> resourceList = p.resources;
+						for (String resource : resourceList)
+						{
+							tmp += ",\"" + resource + "\"";
+						}
+					}
+				}
+		    	else {		// If there is only one deployment region, but multiple policy regions, handle that here.
+					getLog().debug("Processing multiple policy regions");
+					String[] policyRegionsList = policyRegions.split(",");
+
+		    		for ( int i = 0; i < policyRegionsList.length; i ++)
+					{
+						String region = policyRegionsList[i];
+						String regionComma = i == policyRegionsList.length - 1 ? "" : ",";    // If we're at the end, comma="", else comma=","
+
+						List<String> resourceList = p.resources;
+						for (String resource : resourceList)
+						{
+							resource = resource.replace("$regions$", region);
+							resource = resource.replace("$region$", region);
+							getLog().debug("Adding Resource: " + resource);
+							tmp += ",\"" + resource + "\"";
+						}
+					}
+				}
 		    	permPolicy += tmp.substring(1);
 		    	permPolicy += "],";
 	    		
@@ -369,6 +361,14 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
     		getLog().info("Caught ex: " + ex.getMessage() + "\nPermPolicy: " + permPolicy + "\nRolePolicy: " + rolePolicy);
     		ex.printStackTrace();
     	}
+
+    	// If putting into Lambda, add more permissions
+		if ( targetVPC != null )
+		{
+			rolePolicy += ",{\"Effect\":\"Allow\",\"Action\":[\"ec2:CreateNetworkInterface\",\"ec2:DescribeNetworkInterfaces\",\"ec2:DeleteNetworkInterface\"],\"Resource\":\"*\"}";
+			getLog().info("Adding VPC permissions to Lambda!");
+		}
+
     	rolePolicy += 
 			"    ]\n" +
 			"}\n";
@@ -425,10 +425,6 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
     	{
     		getLog().debug("Processing for Region: " + region);
     		
-    		// Set the client region
-//        	lambdaClient.setRegion(Region.getRegion(Regions.fromName(region)));
-//        	s3Client.setRegion(Region.getRegion(Regions.fromName(region)));
-//        	apiClient.setRegion(Region.getRegion(Regions.fromName(region)));
             String uploadJarBucketName = environment + "." + region + "." + uploadJarBucket;
             uploadJarBucketName = uploadJarBucketName.toLowerCase();
 
@@ -436,8 +432,9 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 	    	AWSLambda lambdaClient = (AWSLambda) clients.get(region+"-lambda");
 	    	AmazonApiGateway apiClient = (AmazonApiGateway) clients.get(region+"-apigw");
 	    	AmazonS3 s3Client = (AmazonS3) clients.get(region+"-s3");
-	    	AmazonSNS snsClient = (AmazonSNS) clients.get(region+"-sns");
-	    	
+			AmazonSNS snsClient = (AmazonSNS) clients.get(region+"-sns");
+			AmazonSQS sqsClient = (AmazonSQS) clients.get(region+"-sqs");
+
 			// Try deleting the function
 	    	getLog().debug("Deleting function: " + serviceName);
 	    	DeleteFunctionRequest dfReq = new DeleteFunctionRequest();
@@ -471,10 +468,80 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 	        if ( !updateFunction )
 	        {
 	        	getLog().info("Creating function!");
-	        	
-	            CreateFunctionRequest cfReq = new CreateFunctionRequest();
+				CreateFunctionRequest cfReq = new CreateFunctionRequest();
+				PutFunctionConcurrencyRequest pfcReq = new PutFunctionConcurrencyRequest()
+						.withReservedConcurrentExecutions(concurrencyLimit)
+						.withFunctionName(serviceName);
+				getLog().debug(String.format("TargetVPC: %s", targetVPC));
+	        	if ( targetVPC != null && targetVPC.subnetNames != null && targetVPC.subnetNames.size() > 0)
+				{
+					getLog().info("Adding VPC Configuration");
+					VpcConfig vc = new VpcConfig();
+					AmazonEC2 ec2Client = (AmazonEC2)clients.get(region + "-ec2");
+
+					if ( targetVPC.securityGroupNames != null && targetVPC.securityGroupNames.size() > 0 )
+					{
+						Set<String> sgIds = new HashSet<>();
+						DescribeSecurityGroupsResult dsgRes = ec2Client.describeSecurityGroups();
+						if ( dsgRes.getSdkHttpMetadata().getHttpStatusCode() != 200 ) {
+							getLog().error(String.format("Got error describing Security Groups: %d", dsgRes.getSdkHttpMetadata().getHttpStatusCode()));
+							return;
+						}
+
+						// Build a list of Security Group IDs that match the SG Names
+						List<SecurityGroup> knownSGs = dsgRes.getSecurityGroups();
+						for ( SecurityGroup sg : knownSGs )
+						{
+							if ( targetVPC.securityGroupNames.contains(sg.getGroupName()) )
+							{
+								getLog().debug(String.format("Adding Security Group %s (%s)", sg.getGroupName(), sg.getGroupId()));
+								sgIds.add(sg.getGroupId());
+							}
+						}
+
+						vc.setSecurityGroupIds(sgIds);
+
+					}
+					else
+					{
+						getLog().error("When TargetVPC specified, securityGroupNames must be set!");
+						return;
+					}
+
+					if ( targetVPC.subnetNames != null && targetVPC.subnetNames.size() > 0 )
+					{
+						Set<String> snIds = new HashSet<>();
+						DescribeSubnetsResult dsRes = ec2Client.describeSubnets();
+						if ( dsRes.getSdkHttpMetadata().getHttpStatusCode() != 200 )
+						{
+							getLog().error(String.format("Got error describing Subnets: %d", dsRes.getSdkHttpMetadata().getHttpStatusCode()));
+							return;
+						}
+
+						List<Subnet> knownSubnetIds = dsRes.getSubnets();
+						for ( Subnet sn : knownSubnetIds )
+						{
+							if ( targetVPC.subnetNames.contains(getNameTag(sn.getTags())) )
+							{
+								getLog().debug(String.format("Adding Subnet %s (%s)", getNameTag(sn.getTags()), sn.getSubnetId()));
+								snIds.add(sn.getSubnetId());
+							}
+						}
+
+						vc.setSubnetIds(snIds);
+					}
+					else
+					{
+						getLog().error("When TargetVPC specified, subnetNames must be set!");
+						return;
+					}
+
+					getLog().debug("Setting VPC config!");
+					cfReq.setVpcConfig(vc);
+				}
 	        	cfReq.setFunctionName(serviceName);
 	        	cfReq.setPublish(true);
+
 	        	if ( enableXRay )
 	        	{
 	        		cfReq.setTracingConfig(new TracingConfig().withMode(TracingMode.Active));
@@ -526,9 +593,21 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 	        		{
 	    				getLog().info("Trying Function create");
 			        	CreateFunctionResult cfRes = lambdaClient.createFunction(cfReq);
-			        	getLog().info("cfres: " + cfRes.getLastModified());
+//			        	getLog().info("cfres: " + cfRes.getLastModified());
+						getLog().debug("cfRes.status: " + cfRes.getSdkHttpMetadata().getHttpStatusCode());
 			        	serviceArn = cfRes.getFunctionArn();
 			        	getLog().info("Function Arn: " + cfRes.getFunctionArn());
+			        	if ( concurrencyLimit > 0 )
+						{
+							getLog().info("Setting function concurrency to " + concurrencyLimit);
+							PutFunctionConcurrencyResult pfcRes = lambdaClient.putFunctionConcurrency(pfcReq);
+							getLog().debug("pfcRes.status: " + pfcRes.getSdkHttpMetadata().getHttpStatusCode());
+							if (pfcRes.getSdkHttpMetadata().getHttpStatusCode() > 202)
+							{
+								getLog().error("Got error from PutFunctionConcurrency request: " + pfcRes.getSdkHttpMetadata().getHttpStatusCode());
+								return;
+							}
+						}
 			        	break;
 	        		}
 	        		catch ( com.amazonaws.services.lambda.model.InvalidParameterValueException ipve )
@@ -681,30 +760,30 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 	        	getLog().info("Create Alias succeeded.");
 	        }
     	}
-    	
-    	// Handle sns events
-    	if ( snsTopics != null && snsTopics.size() > 0 )
-    	{
-    		getLog().info("Processing snsTopics!");
-    		for ( String region : regions.split(","))
-    		{
-    			for ( SNSEvent t : snsTopics )
-    			{
-		        	t.topicArn = t.topicArn.replace("$regions$", regions);
-		        	t.topicArn = t.topicArn.replace("$region$", regions);
-		        	t.topicArn = t.topicArn.replace("$accountId$", accountNumber);
+
+		// Handle sns events
+		if ( snsTopics != null && snsTopics.size() > 0 )
+		{
+			getLog().info("Processing snsTopics!");
+			for ( String region : regions.split(","))
+			{
+				for ( SNSEvent t : snsTopics )
+				{
+					t.topicArn = t.topicArn.replace("$regions$", regions);
+					t.topicArn = t.topicArn.replace("$region$", regions);
+					t.topicArn = t.topicArn.replace("$accountId$", accountNumber);
 
 					// Parse out the built arn to query the existing topics
 					String [] arnParts = t.topicArn.split(":");
 					String snsregion = arnParts[3];
-					
-		        	getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", snsregion, t.displayName, 
-		    				t.topicName, t.topicArn));
-	    	    	AWSLambda lambdaClient = (AWSLambda) clients.get(region+"-lambda");
-		    		String endpoint = "arn:aws:lambda:" + region + ":" + accountNumber + ":function:" + serviceName;
+
+					getLog().info(String.format("Processing SNS Subscription configuration in region %s for %s/%s/%s ", snsregion, t.displayName,
+							t.topicName, t.topicArn));
+					AWSLambda lambdaClient = (AWSLambda) clients.get(region+"-lambda");
+					String endpoint = "arn:aws:lambda:" + region + ":" + accountNumber + ":function:" + serviceName;
 					String protocol = "lambda";
 					String topicArn = t.topicArn;
-		    		
+
 					getLog().debug("Using SNS region " + snsregion);
 					AmazonSNS snsClient = (AmazonSNS) clients.get(snsregion + "-sns");
 					if ( snsClient == null )
@@ -713,66 +792,66 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 						snsClient = AmazonSNSClientBuilder.standard().withRegion(Regions.fromName(snsregion)).build();
 						clients.put(snsregion+"-sns", snsClient);
 					}
-					
+
 					// Check to see if the topic exists; if not, create it
 					getLog().debug("Getting Topics");
-		    		ListTopicsRequest ltReq = new ListTopicsRequest();
-		    		ListTopicsResult listRes = snsClient.listTopics(ltReq);
-		    		if ( listRes.getSdkHttpMetadata().getHttpStatusCode() != 200 )
-		    		{
-		    			getLog().error("Failed to list SNS Topics!");
-		    		}
-		    		
-		    		boolean foundTopic = false;
-		    		for ( Topic et : listRes.getTopics() )
-		    		{
-		    			getLog().debug("Found topic: " + et.getTopicArn());
-		    			if ( et.getTopicArn().contains(":" + t.topicName))
-		    				foundTopic = true;
-		    		}
-		    		getLog().debug("Found Existing Topic: " + foundTopic);
-		    		
-		    		if ( !foundTopic )
-		    		{
-		    			CreateTopicRequest ctReq = new CreateTopicRequest()
-		    					.withName(t.topicName);
+					ListTopicsRequest ltReq = new ListTopicsRequest();
+					ListTopicsResult listRes = snsClient.listTopics(ltReq);
+					if ( listRes.getSdkHttpMetadata().getHttpStatusCode() != 200 )
+					{
+						getLog().error("Failed to list SNS Topics!");
+					}
+
+					boolean foundTopic = false;
+					for ( Topic et : listRes.getTopics() )
+					{
+						getLog().debug("Found topic: " + et.getTopicArn());
+						if ( et.getTopicArn().contains(":" + t.topicName))
+							foundTopic = true;
+					}
+					getLog().debug("Found Existing Topic: " + foundTopic);
+
+					if ( !foundTopic )
+					{
+						CreateTopicRequest ctReq = new CreateTopicRequest()
+								.withName(t.topicName);
 						CreateTopicResult ctRes = snsClient.createTopic(ctReq);
 						getLog().info("Created Topic " + t.topicName + ", status: " + ctRes.getSdkHttpMetadata().getHttpStatusCode());
-		    		}
-		    		
+					}
+
 					// See if the subscription already exists; if so, delete it
-		    		boolean foundSub = false;
-		    		String foundSubArn = null;
-		    		if ( foundTopic )
-		    		{
-			    		ListSubscriptionsResult lsRes = null;
-			    		ListSubscriptionsRequest lsReq = new ListSubscriptionsRequest();
-			    		do {
-			    			lsRes = snsClient.listSubscriptions(lsReq);
-				    		getLog().debug("Listing Subscriptions: Token = " + lsRes.getNextToken());
-				    		for ( Subscription s : lsRes.getSubscriptions() )
-				    		{
-				    			getLog().debug(String.format("Found subscription %s to %s", s.getSubscriptionArn(), s.getEndpoint()));
-				    			if ( s.getEndpoint().contains(endpoint) && s.getTopicArn().equals(topicArn))
-				    			{
-				    				foundSub = true;
-				    				foundSubArn = s.getSubscriptionArn();
-					    			UnsubscribeRequest uReq = new UnsubscribeRequest()
-					    					.withSubscriptionArn(foundSubArn);
+					boolean foundSub = false;
+					String foundSubArn = null;
+					if ( foundTopic )
+					{
+						ListSubscriptionsResult lsRes = null;
+						ListSubscriptionsRequest lsReq = new ListSubscriptionsRequest();
+						do {
+							lsRes = snsClient.listSubscriptions(lsReq);
+							getLog().debug("Listing Subscriptions: Token = " + lsRes.getNextToken());
+							for ( Subscription s : lsRes.getSubscriptions() )
+							{
+								getLog().debug(String.format("Found subscription %s to %s", s.getSubscriptionArn(), s.getEndpoint()));
+								if ( s.getEndpoint().contains(endpoint) && s.getTopicArn().equals(topicArn))
+								{
+									foundSub = true;
+									foundSubArn = s.getSubscriptionArn();
+									UnsubscribeRequest uReq = new UnsubscribeRequest()
+											.withSubscriptionArn(foundSubArn);
 									UnsubscribeResult uRes = snsClient.unsubscribe(uReq);
 									getLog().info("Unsubscribed from topic: " + uRes.getSdkHttpMetadata().getHttpStatusCode());
-				    			}
-				    		}
+								}
+							}
 //				    		if ( lsRes.getNextToken() != null )
 //				    		{
 //					    		lsRes = snsClient.listSubscriptions(lsRes.getNextToken());
 //					    		getLog().debug("Did next list, token = " + lsRes.getNextToken());
 //				    		}
-				    		lsReq.setNextToken(lsRes.getNextToken());
-			    		} while ( lsRes.getNextToken() != null);
-		    		}
-		    		getLog().debug("FoundSub: " + foundSub);
-		    		
+							lsReq.setNextToken(lsRes.getNextToken());
+						} while ( lsRes.getNextToken() != null);
+					}
+					getLog().debug("FoundSub: " + foundSub);
+
 //		    		if ( foundSub )
 //		    		{
 //		    			UnsubscribeRequest uReq = new UnsubscribeRequest()
@@ -780,16 +859,16 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 //						UnsubscribeResult uRes = snsClient.unsubscribe(uReq);
 //						getLog().info("Unsubscribed from topic: " + uRes.getSdkHttpMetadata().getHttpStatusCode());
 //		    		}
-		    		
-		    		// Create the subscriptions
-		    		getLog().debug(String.format("Subscribing to topic %s endpoint %s using protocol %s", topicArn, endpoint, protocol));
+
+					// Create the subscriptions
+					getLog().debug(String.format("Subscribing to topic %s endpoint %s using protocol %s", topicArn, endpoint, protocol));
 					SubscribeRequest subReq = new SubscribeRequest()
-		    				.withEndpoint(endpoint)
-		    				.withProtocol(protocol)
-		    				.withTopicArn(topicArn);
+							.withEndpoint(endpoint)
+							.withProtocol(protocol)
+							.withTopicArn(topicArn);
 					SubscribeResult subRes = snsClient.subscribe(subReq);
-					
-					getLog().info(String.format("Subscribed with %s/%s/%s, SubArn = %s, status: %d", endpoint, protocol, topicArn, 
+
+					getLog().info(String.format("Subscribed with %s/%s/%s, SubArn = %s, status: %d", endpoint, protocol, topicArn,
 							subRes.getSubscriptionArn(), subRes.getSdkHttpMetadata().getHttpStatusCode()));
 
 					AddPermissionRequest apReq = new AddPermissionRequest();
@@ -805,11 +884,77 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 						return;
 					}
 					getLog().debug("Got statement: " + apRes.getStatement() + " from AddPermission call");
-    			}
-    		}
-    	}
-    	
-    	// Handle API Proxy Events - Where all resources have an ANY proxy attached to them.
+				}
+			}
+		}
+		// Handle sqs triggers
+		if ( sqsQueues != null && sqsQueues.size() > 0 )
+		{
+			getLog().info("Processing sqsQueues!");
+			for ( String region : regions.split(","))
+			{
+				for ( SQSEvent t : sqsQueues )
+				{
+					t.queueArn = t.queueArn.replace("$regions$", regions);
+					t.queueArn = t.queueArn.replace("$region$", regions);
+					t.queueArn = t.queueArn.replace("$accountId$", accountNumber);
+
+					// Parse out the built arn to query the existing topics
+					String [] arnParts = t.queueArn.split(":");
+					String sqsregion = arnParts[3];
+
+					getLog().info(String.format("Processing SQS Subscription configuration in region %s for %s/%s/%d ",
+							sqsregion, t.queueArn,
+							t.queueName, t.batchSize));
+					AWSLambda lambdaClient = (AWSLambda) clients.get(region+"-lambda");
+					String endpoint = "arn:aws:lambda:" + region + ":" + accountNumber + ":function:" + serviceName;
+					String protocol = "lambda";
+					String queueArn = t.queueArn;
+
+					getLog().debug("Using SQS region " + sqsregion);
+					AmazonSQS sqsClient = (AmazonSQS) clients.get(sqsregion + "-sqs");
+					if ( sqsClient == null )
+					{
+						getLog().debug("Dynamically getting new SQS Client for region " + sqsregion);
+						sqsClient = AmazonSQSClientBuilder.standard().withRegion(Regions.fromName(sqsregion)).build();
+						clients.put(sqsregion+"-sqs", sqsClient);
+					}
+
+					CreateEventSourceMappingRequest cesmReq = new CreateEventSourceMappingRequest()
+							.withBatchSize(t.batchSize)
+							.withEnabled(true)
+							.withEventSourceArn(queueArn)
+							.withFunctionName(serviceName);
+					CreateEventSourceMappingResult cesmResp = lambdaClient.createEventSourceMapping(cesmReq);
+					if ( cesmResp.getSdkHttpMetadata().getHttpStatusCode() >= 300 )
+					{
+						getLog().error("Received error from CreateEventSourceMapping: " + cesmResp.getSdkHttpMetadata().getHttpStatusCode());
+						return;
+					}
+
+					getLog().info(String.format("Subscribed with %s/%s/%s, status: %d", endpoint, protocol,
+							queueArn,
+							cesmResp.getSdkHttpMetadata().getHttpStatusCode()));
+
+					AddPermissionRequest apReq = new AddPermissionRequest();
+					apReq.setAction("lambda:invokeFunction");
+					apReq.setStatementId("TopicPerm" + Long.toString(System.currentTimeMillis()));
+					apReq.setSourceArn(queueArn);
+					apReq.setFunctionName(endpoint);
+					apReq.setPrincipal("sqs.amazonaws.com");
+					AddPermissionResult apRes = lambdaClient.addPermission(apReq);
+					if ( apRes.getSdkHttpMetadata().getHttpStatusCode() >= 300 )
+					{
+						getLog().error("Received error from AddPermission: " + apRes.getSdkHttpMetadata().getHttpStatusCode());
+						return;
+					}
+					getLog().debug("Got statement: " + apRes.getStatement() + " from AddPermission call");
+				}
+			}
+		}
+
+
+		// Handle API Proxy Events - Where all resources have an ANY proxy attached to them.
     	getLog().debug("apiProxyEvent: " + apiProxyEvent + "\nAPI Name: " + apiProxyEvent.apiName);
     	if ( apiProxyEvent != null && apiProxyEvent.apiName != null )
     	{
@@ -826,9 +971,12 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 	    		RestApi theApi = null;
 	    		for ( RestApi api : graRes.getItems() )
 	    		{
-	    			getLog().info("Found existing REST API: " + api.getName());
+	    			getLog().info(String.format("Found existing REST API: %s (%s)", api.getName(), api.getId()));
 	    			if ( apiProxyEvent.apiName.equalsIgnoreCase(api.getName()))
-	    				theApi = api;
+					{
+						getLog().debug("Found matching name!");
+						theApi = api;
+					}
 	    		}
 	    		
 	    		if ( theApi != null )
@@ -968,7 +1116,17 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
     	}         
         
     }
-    
+
+	private String getNameTag(List<Tag> tags)
+	{
+		for ( Tag t : tags )
+		{
+			if (t.getKey().equalsIgnoreCase("name"))
+				return t.getValue();
+		}
+		return null;
+	}
+
 	private boolean hasPathParam ( Operation op )
 	{
 		boolean ret = false;
