@@ -363,12 +363,17 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
     	}
 
     	// If putting into Lambda, add more permissions
-		if ( targetVPC != null )
+		if ( targetVPC != null && targetVPC.subnetNames != null && targetVPC.securityGroupNames != null )
 		{
 			rolePolicy += ",{\"Effect\":\"Allow\",\"Action\":[\"ec2:CreateNetworkInterface\",\"ec2:DescribeNetworkInterfaces\",\"ec2:DeleteNetworkInterface\"],\"Resource\":\"*\"}";
 			getLog().info("Adding VPC permissions to Lambda!");
 		}
 
+		if ( sqsQueues != null && sqsQueues.size() > 0 )
+		{
+			rolePolicy += ",{\"Effect\":\"Allow\",\"Action\":[\"sqs:ReceiveMessage\"],\"Resource\":\"*\"}";
+			getLog().info("Adding SQS permissions to Lambda!");
+		}
     	rolePolicy += 
 			"    ]\n" +
 			"}\n";
@@ -920,22 +925,6 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 						clients.put(sqsregion+"-sqs", sqsClient);
 					}
 
-					CreateEventSourceMappingRequest cesmReq = new CreateEventSourceMappingRequest()
-							.withBatchSize(t.batchSize)
-							.withEnabled(true)
-							.withEventSourceArn(queueArn)
-							.withFunctionName(serviceName);
-					CreateEventSourceMappingResult cesmResp = lambdaClient.createEventSourceMapping(cesmReq);
-					if ( cesmResp.getSdkHttpMetadata().getHttpStatusCode() >= 300 )
-					{
-						getLog().error("Received error from CreateEventSourceMapping: " + cesmResp.getSdkHttpMetadata().getHttpStatusCode());
-						return;
-					}
-
-					getLog().info(String.format("Subscribed with %s/%s/%s, status: %d", endpoint, protocol,
-							queueArn,
-							cesmResp.getSdkHttpMetadata().getHttpStatusCode()));
-
 					AddPermissionRequest apReq = new AddPermissionRequest();
 					apReq.setAction("lambda:invokeFunction");
 					apReq.setStatementId("TopicPerm" + Long.toString(System.currentTimeMillis()));
@@ -949,6 +938,60 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
 						return;
 					}
 					getLog().debug("Got statement: " + apRes.getStatement() + " from AddPermission call");
+
+					// This is because IAM takes > 5 seconds to reflect new/updated policy
+					try { Thread.sleep(10000); } catch ( Exception ex ){ex.printStackTrace();}
+
+					ListEventSourceMappingsRequest lesmReq = new ListEventSourceMappingsRequest()
+							.withEventSourceArn(queueArn)
+							.withFunctionName(serviceName);
+					ListEventSourceMappingsResult lesmRes = lambdaClient.listEventSourceMappings(lesmReq);
+					getLog().info("Received status from ListEventSourceMapping: " + lesmRes.getSdkHttpMetadata().getHttpStatusCode());
+					boolean found = false;
+					String esmUUID = null;
+					for ( EventSourceMappingConfiguration esmc : lesmRes.getEventSourceMappings() )
+					{
+						found = true;
+						getLog().debug("Found ESM: " + esmc.getUUID());
+						esmUUID = esmc.getUUID();
+					}
+
+					if ( esmUUID != null )
+					{
+						UpdateEventSourceMappingRequest uesmReq = new UpdateEventSourceMappingRequest()
+								.withBatchSize(t.batchSize)
+								.withEnabled(true)
+								.withUUID(esmUUID)
+								.withFunctionName(serviceName);
+						UpdateEventSourceMappingResult uesmRes = lambdaClient.updateEventSourceMapping(uesmReq);
+						if (uesmRes.getSdkHttpMetadata().getHttpStatusCode() >= 300)
+						{
+							getLog().error("Received error from UpdateEventSourceMapping: " + uesmRes.getSdkHttpMetadata().getHttpStatusCode());
+							return;
+						}
+						getLog().info(String.format("Updated subscription with %s/%s/%s, status: %d", endpoint, protocol,
+								queueArn,
+								uesmRes.getSdkHttpMetadata().getHttpStatusCode()));
+					}
+					else
+					{
+						CreateEventSourceMappingRequest cesmReq = new CreateEventSourceMappingRequest()
+								.withBatchSize(t.batchSize)
+								.withEnabled(true)
+								.withEventSourceArn(queueArn)
+								.withFunctionName(serviceName);
+						CreateEventSourceMappingResult cesmRes = lambdaClient.createEventSourceMapping(cesmReq);
+						if (cesmRes.getSdkHttpMetadata().getHttpStatusCode() >= 300)
+						{
+							getLog().error("Received error from CreateEventSourceMapping: " + cesmRes.getSdkHttpMetadata().getHttpStatusCode());
+							return;
+						}
+						getLog().info(String.format("Subscribed with %s/%s/%s, status: %d", endpoint, protocol,
+								queueArn,
+								cesmRes.getSdkHttpMetadata().getHttpStatusCode()));
+					}
+
+
 				}
 			}
 		}
