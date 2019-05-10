@@ -1,0 +1,18 @@
+<lifecycles xmlns="http://maven.apache.org/LIFECYCLE/1.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/LIFECYCLE/1.0.0 http://maven.apache.org/xsd/lifecycle-1.0.0.xsd">
+    <lifecycle>
+        <id/>
+        <phases>
+            <phase>
+                <id>deploy</id>
+                <executions>
+                    <execution>
+                        <configuration/>
+                        <goals>lambda-deploy</goals>
+                    </execution>
+                </executions>
+                <configuration/>
+            </phase>
+        </phases>
+    </lifecycle>
+</lifecycles>

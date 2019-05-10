@@ -91,8 +91,10 @@ import io.swagger.models.Path;
 import io.swagger.models.Swagger;
 import io.swagger.models.parameters.Parameter;
 import io.swagger.parser.SwaggerParser;
- 
-@Mojo( name = "deploy", defaultPhase=LifecyclePhase.DEPLOY, requiresOnline=true, requiresProject=true)
+
+
+//@Mojo( name = "deploy", defaultPhase=LifecyclePhase.DEPLOY, requiresOnline=true, requiresProject=true)
+@Mojo( name = "lambda-deploy", aggregator = true, defaultPhase=LifecyclePhase.DEPLOY, requiresOnline=true, requiresProject=true)
 public class ServerlessDeployMojo extends BaseLambdaMojo
 {
 	
@@ -112,6 +114,12 @@ public class ServerlessDeployMojo extends BaseLambdaMojo
         if ( project != null )
         {
         	getLog().info("Name/Packaging: " + project.getName() + " / " + project.getPackaging());
+        	if ( project.getArtifact() == null )
+        		getLog().error("Artifact NULL");
+        	getLog().info("Artifact: " + project.getArtifact().toString());
+        	getLog().info("File name: " + project.getFile().getName());
+        	if ( project.getArtifact().getFile() == null )
+        		getLog().error("File NULL");
         	getLog().info("Artifact name: " + project.getArtifact().getFile().getName());
         }
 

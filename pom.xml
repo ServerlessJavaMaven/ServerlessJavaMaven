@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.mcdaniel</groupId>
 	<artifactId>serverless-maven-plugin</artifactId>
-	<version>1.0.2-SNAPSHOT</version>
+	<version>1.0.3-SNAPSHOT</version>
 	<packaging>maven-plugin</packaging>
 
 	<properties>
@@ -14,16 +14,16 @@
 		<aws.sdk.version>1.11.512</aws.sdk.version>
 	</properties>
 
-	<distributionManagement>
-		<snapshotRepository>
-			<id>tap3-repo-bucket-snapshot</id>
-			<url>s3://tap3-dev-maven-repo/snapshot</url>
-		</snapshotRepository>
-		<repository>
-			<id>tap3-repo-bucket-release</id>
-		<url>s3://tap3-dev-maven-repo/release</url>
-		</repository>
-	</distributionManagement>
+<!--	<distributionManagement>-->
+<!--		<snapshotRepository>-->
+<!--			<id>tap3-repo-bucket-snapshot</id>-->
+<!--			<url>s3://tap3-dev-maven-repo/snapshot</url>-->
+<!--		</snapshotRepository>-->
+<!--		<repository>-->
+<!--			<id>tap3-repo-bucket-release</id>-->
+<!--		<url>s3://tap3-dev-maven-repo/release</url>-->
+<!--		</repository>-->
+<!--	</distributionManagement>-->
 
 	<build>
 		<sourceDirectory>src/main/java</sourceDirectory>
@@ -211,10 +211,6 @@
 		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-java-sdk-lambda</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>com.amazonaws</groupId>
-			<artifactId>aws-java-sdk-api-gateway</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.maven</groupId>

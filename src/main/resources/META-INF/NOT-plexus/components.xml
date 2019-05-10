@@ -1,0 +1,24 @@
+<component-set>
+    <components>
+        <component>
+            <role>org.apache.maven.lifecycle.Lifecycle</role>
+            <role-hint>serverless-maven-plugin_PackagingType</role-hint>
+            <implementation>org.apache.maven.lifecycle.Lifecycle</implementation>
+            <configuration>
+                <id>serverless-maven-plugin_LifecycleID</id>
+                <phases>
+<!--                    <phase>lambda-analyze</phase>-->
+<!--                    <phase>lambda-package</phase>-->
+                    <phase>lambda-deploy</phase>
+                </phases>
+                <default-phases>
+                    <!--
+                    <analyze>com.mcdaniel:serverless-maven-plugin:analyzeGoal</analyze>
+                    <package>com.mcdaniel:serverless-maven-plugin:packageGoal</package>
+                    -->
+                    <deploy>com.mcdaniel:serverless-maven-plugin:lambdaDeployGoal</deploy>
+                </default-phases>
+            </configuration>
+        </component>
+    </components>
+</component-set>
